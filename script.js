@@ -254,8 +254,7 @@
         html += `<a href="cart.html">Shopping Cart</a>`;
         html += `<a href="cart.html">Checkout</a>`;
       }
-      // Wish list placeholder
-      html += `<a href="#">Wish List (${wishCount})</a>`;
+      // Wish list removed per latest requirements
       topLinks.innerHTML = html;
       const logoutLink = document.getElementById('logout-link');
       if (logoutLink) {
@@ -314,6 +313,71 @@
       div.className = 'ad-item';
       div.innerHTML = `<img src="${ad.image}" alt="Advertisement"><p>${ad.text}</p>`;
       adsContainer.appendChild(div);
+    });
+  }
+
+  /**
+   * Render product sections on the home page similar to the "Specials"
+   * section of the reference store. For each category, display up to
+   * four products in a grid with quantity selectors and add to cart
+   * buttons. When the search query is active, this function will
+   * filter items across all categories and only show categories that
+   * have matching products. Items are displayed using the shared
+   * .product-card styles defined in the CSS.
+   */
+  function renderHomeProducts() {
+    const productsSection = document.getElementById('products');
+    if (!productsSection) return;
+    productsSection.innerHTML = '';
+    const query = searchQuery ? searchQuery.toLowerCase() : '';
+    categoriesData.forEach(cat => {
+      // Filter items by search query if present
+      let items = cat.items;
+      if (query) {
+        items = items.filter(item => item.name.toLowerCase().includes(query));
+      }
+      if (!items || items.length === 0) return;
+      // Limit to first 4 items for the home page
+      const itemsToShow = items.slice(0, 4);
+      const catDiv = document.createElement('div');
+      catDiv.className = 'products-category';
+      catDiv.innerHTML = `<div class="products-header"><h2>${cat.name}</h2><a class="view-all" href="category.html?cat=${cat.id}">View all</a></div>`;
+      const grid = document.createElement('div');
+      grid.className = 'products-grid';
+      itemsToShow.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+          <img src="${item.image}" alt="${item.name}">
+          <h3 class="product-name">${item.name}</h3>
+          <div class="product-price"><span class="price">KWD ${item.price}</span></div>
+          <div class="product-actions">
+            <label style="font-size:0.75rem;margin-right:4px;">Qty:</label>
+            <input type="number" class="qty-input" min="1" value="1" style="width:60px;margin-right:8px;">
+            <button class="btn add-cart" data-cat="${cat.id}" data-id="${item.id}">Add to Cart</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      catDiv.appendChild(grid);
+      productsSection.appendChild(catDiv);
+    });
+    // Event delegation for Add to Cart buttons in products grid
+    productsSection.addEventListener('click', function (e) {
+      const btn = e.target.closest('button.add-cart');
+      if (btn && btn.dataset.cat) {
+        const categoryId = parseInt(btn.dataset.cat);
+        const itemId = parseInt(btn.dataset.id);
+        let qty = 1;
+        const parentCard = btn.closest('.product-card');
+        if (parentCard) {
+          const input = parentCard.querySelector('.qty-input');
+          if (input) {
+            qty = parseInt(input.value) || 1;
+          }
+        }
+        addToCart(categoryId, itemId, qty);
+      }
     });
   }
 
@@ -761,12 +825,13 @@
     container.innerHTML = '';
     // Header with logout button
     const header = document.createElement('div');
+    header.className = 'admin-section';
     header.style.display = 'flex';
     header.style.justifyContent = 'space-between';
     header.style.alignItems = 'center';
     const title = document.createElement('h2');
     title.textContent = 'Admin Dashboard';
-    title.style.color = 'var(--primary)';
+    // color is handled by CSS
     const logoutBtn = document.createElement('button');
     logoutBtn.className = 'btn';
     logoutBtn.textContent = 'Log Out';
@@ -779,7 +844,7 @@
     container.appendChild(header);
     // Password change section
     const pwdSection = document.createElement('div');
-    pwdSection.className = 'form-container';
+    pwdSection.className = 'admin-section';
     pwdSection.innerHTML = `
       <h3>Change Admin Password</h3>
       <form id="change-pwd-form">
@@ -810,11 +875,11 @@
       alert('Password updated successfully');
       changePwdForm.reset();
     });
-    // Category and product management section
-    const management = document.createElement('div');
-    management.className = 'form-container';
-    management.style.marginTop = '40px';
-    management.innerHTML = `<h3>Manage Categories & Products</h3>`;
+    // ---- Split management into separate sections: Categories and Items ----
+    // Manage Categories section
+    const catSection = document.createElement('div');
+    catSection.className = 'admin-section';
+    catSection.innerHTML = `<h3>Manage Categories</h3>`;
     // Add new category form with image upload option
     const addCatForm = document.createElement('form');
     addCatForm.id = 'add-category-form';
@@ -829,65 +894,113 @@
       </div>
       <button type="submit" class="btn">Add Category</button>
     `;
-    management.appendChild(addCatForm);
-    // Category list container
+    catSection.appendChild(addCatForm);
+    // Container for category list
     const catList = document.createElement('div');
     catList.id = 'admin-category-list';
     catList.style.marginTop = '24px';
-    management.appendChild(catList);
-    container.appendChild(management);
-    // Populate category list
+    catSection.appendChild(catList);
+    container.appendChild(catSection);
+
+    // Manage Items section
+    const itemSection = document.createElement('div');
+    itemSection.className = 'admin-section';
+    itemSection.innerHTML = `<h3>Manage Items</h3>`;
+    // Dropdown to select category
+    const selectWrap = document.createElement('div');
+    selectWrap.className = 'form-group';
+    selectWrap.innerHTML = `
+      <label for="item-category-select">Select Category</label>
+      <select id="item-category-select"></select>
+      <button type="button" class="btn" id="add-item-btn">Add Item</button>
+    `;
+    itemSection.appendChild(selectWrap);
+    // Container for item list
+    const itemListDiv = document.createElement('div');
+    itemListDiv.id = 'admin-item-list';
+    itemListDiv.style.marginTop = '24px';
+    itemSection.appendChild(itemListDiv);
+    container.appendChild(itemSection);
+
+    // Function to refresh the category list in the Manage Categories section
     function refreshCategoryList() {
       catList.innerHTML = '';
       categoriesData.forEach(cat => {
-        const catDiv = document.createElement('div');
-        catDiv.style.border = '1px solid #333';
-        catDiv.style.padding = '12px';
-        catDiv.style.marginBottom = '16px';
-        // Display category image if provided
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.padding = '12px';
+        row.style.border = '1px solid #333';
+        row.style.marginBottom = '12px';
         let catImg = '';
         if (cat.image) {
           catImg = `<img src="${cat.image}" alt="${cat.name}" style="width:48px;height:48px;object-fit:cover;margin-right:8px;border-radius:4px;">`;
         }
-        catDiv.innerHTML = `
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <div style="display:flex;align-items:center;">
-              ${catImg}
-              <strong>${cat.name}</strong> (ID: ${cat.id})
-            </div>
-            <div>
-              <button class="btn" data-action="edit-cat" data-id="${cat.id}">Edit Name</button>
-              <button class="btn" data-action="delete-cat" data-id="${cat.id}">Delete Category</button>
-            </div>
+        row.innerHTML = `
+          <div style="display:flex;align-items:center;">
+            ${catImg}
+            <strong>${cat.name}</strong> (ID: ${cat.id})
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" data-action="edit-cat" data-id="${cat.id}">Edit Name</button>
+            <button class="btn" data-action="delete-cat" data-id="${cat.id}">Delete</button>
           </div>
         `;
-        // Products table for this category
-        const itemList = document.createElement('div');
-        cat.items.forEach(item => {
-          const itemDiv = document.createElement('div');
-          itemDiv.style.borderTop = '1px dashed #444';
-          itemDiv.style.padding = '8px 0';
-          itemDiv.innerHTML = `
-            <div><strong>${item.name}</strong> – KWD ${item.price}</div>
-            <div>Description: ${item.description}</div>
-            <div>Image: <a href="${item.image}" target="_blank">${item.image.substring(0,50)}${item.image.length > 50 ? '...' : ''}</a></div>
+        catList.appendChild(row);
+      });
+      // Also refresh the category dropdown for items
+      refreshCategorySelect();
+    }
+
+    // Populate category dropdown used for items
+    function refreshCategorySelect() {
+      const select = itemSection.querySelector('#item-category-select');
+      const currentValue = select.value;
+      select.innerHTML = '';
+      categoriesData.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.id;
+        option.textContent = cat.name;
+        select.appendChild(option);
+      });
+      // Restore previously selected value if still exists
+      if (currentValue) {
+        const opt = Array.from(select.options).find(o => o.value === currentValue);
+        if (opt) {
+          select.value = currentValue;
+        }
+      }
+      // Trigger item list refresh after updating select options
+      refreshItemList();
+    }
+
+    // Refresh item list for selected category
+    function refreshItemList() {
+      const select = itemSection.querySelector('#item-category-select');
+      const catId = parseInt(select.value);
+      const cat = categoriesData.find(c => c.id === catId);
+      itemListDiv.innerHTML = '';
+      if (!cat) return;
+      cat.items.forEach(item => {
+        const row = document.createElement('div');
+        row.style.border = '1px solid #333';
+        row.style.padding = '8px';
+        row.style.marginBottom = '8px';
+        row.innerHTML = `
+          <strong>${item.name}</strong> – KWD ${item.price}<br>
+          <span style="font-size:0.85rem;">${item.description}</span>
+          <div style="margin-top:8px;display:flex;gap:8px;">
             <button class="btn" data-action="edit-item" data-cat="${cat.id}" data-id="${item.id}">Edit</button>
             <button class="btn" data-action="delete-item" data-cat="${cat.id}" data-id="${item.id}">Delete</button>
-          `;
-          itemList.appendChild(itemDiv);
-        });
-        // Button to add new item
-        const addItemBtn = document.createElement('button');
-        addItemBtn.className = 'btn';
-        addItemBtn.textContent = 'Add New Item';
-        addItemBtn.dataset.action = 'add-item';
-        addItemBtn.dataset.cat = cat.id;
-        catDiv.appendChild(addItemBtn);
-        catDiv.appendChild(itemList);
-        catList.appendChild(catDiv);
+          </div>
+        `;
+        itemListDiv.appendChild(row);
       });
     }
+
     refreshCategoryList();
+
     // Add new category handler with optional image upload
     addCatForm.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -899,43 +1012,38 @@
       }
       const newId = categoriesData.length ? Math.max(...categoriesData.map(c => c.id)) + 1 : 1;
       const file = fileInput && fileInput.files && fileInput.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function () {
-          const dataUrl = reader.result;
-          categoriesData.push({ id: newId, name, items: [], image: dataUrl });
-          saveCategories(categoriesData);
-          refreshCategoryList();
-          addCatForm.reset();
-          // update category links in nav and side panel
-          renderCategoryLinks();
-          renderSideCategoryLinks();
-        };
-        reader.readAsDataURL(file);
-      } else {
-        categoriesData.push({ id: newId, name, items: [], image: '' });
+      function finishAddCategory(imageSrc) {
+        categoriesData.push({ id: newId, name, items: [], image: imageSrc || '' });
         saveCategories(categoriesData);
         refreshCategoryList();
         addCatForm.reset();
         renderCategoryLinks();
         renderSideCategoryLinks();
       }
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function () {
+          finishAddCategory(reader.result);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        finishAddCategory('');
+      }
     });
-    // Handle clicks on category list (delete, edit, add item, edit item, delete item)
+
+    // Click handlers for categories (edit/delete)
     catList.addEventListener('click', function (e) {
       const btn = e.target.closest('button');
       if (!btn || !btn.dataset.action) return;
       const action = btn.dataset.action;
-      // For delete-cat and edit-cat, the id is in data-id; for items it's in data-cat
-      const categoryId = parseInt(btn.dataset.cat || btn.dataset.id);
+      const categoryId = parseInt(btn.dataset.id);
       if (action === 'delete-cat') {
         if (!confirm('Are you sure you want to delete this category?')) return;
         const idx = categoriesData.findIndex(c => c.id === categoryId);
-      if (idx !== -1) {
+        if (idx !== -1) {
           categoriesData.splice(idx, 1);
           saveCategories(categoriesData);
           refreshCategoryList();
-          // update nav and side panel links
           renderCategoryLinks();
           renderSideCategoryLinks();
         }
@@ -951,13 +1059,29 @@
             renderSideCategoryLinks();
           }
         }
-      } else if (action === 'add-item') {
-        showItemForm(null, categoryId);
-      } else if (action === 'edit-item') {
-        const itemId = parseInt(btn.dataset.id);
-        showItemForm(itemId, categoryId);
-      } else if (action === 'delete-item') {
-        const itemId = parseInt(btn.dataset.id);
+      }
+    });
+
+    // Category selection change to refresh items
+    const catSelect = itemSection.querySelector('#item-category-select');
+    catSelect.addEventListener('change', refreshItemList);
+
+    // Handler for Add Item button
+    const addItemBtn = itemSection.querySelector('#add-item-btn');
+    addItemBtn.addEventListener('click', function () {
+      const select = itemSection.querySelector('#item-category-select');
+      const catId = parseInt(select.value);
+      showItemForm(null, catId);
+    });
+
+    // Handle clicks within item list (edit/delete)
+    itemListDiv.addEventListener('click', function (e) {
+      const btn = e.target.closest('button');
+      if (!btn || !btn.dataset.action) return;
+      const action = btn.dataset.action;
+      const categoryId = parseInt(btn.dataset.cat);
+      const itemId = parseInt(btn.dataset.id);
+      if (action === 'delete-item') {
         if (!confirm('Delete this item?')) return;
         const cat = categoriesData.find(c => c.id === categoryId);
         if (cat) {
@@ -965,12 +1089,15 @@
           if (idx2 !== -1) {
             cat.items.splice(idx2, 1);
             saveCategories(categoriesData);
-            refreshCategoryList();
+            refreshItemList();
           }
         }
+      } else if (action === 'edit-item') {
+        showItemForm(itemId, categoryId);
       }
     });
-    // Item form popup
+
+    // Override showItemForm to refresh both category and item lists after saving
     function showItemForm(itemId, categoryId) {
       const overlay = document.createElement('div');
       overlay.style.position = 'fixed';
@@ -1048,6 +1175,7 @@
           }
           saveCategories(categoriesData);
           refreshCategoryList();
+          refreshItemList();
           document.body.removeChild(overlay);
         }
         if (file) {
@@ -1067,7 +1195,7 @@
       });
     }
 
-    // After category management, render banner and user management sections
+    // After management sections, render banner and user management
     renderBannerAdmin(container);
     renderUserManagement(container);
   }
@@ -1081,8 +1209,7 @@
   function renderBannerAdmin(parent) {
     // Create section container
     const section = document.createElement('div');
-    section.className = 'form-container';
-    section.style.marginTop = '40px';
+    section.className = 'admin-section';
     section.innerHTML = `
       <h3>Manage Home Banners</h3>
       <form id="add-banner-form">
@@ -1185,8 +1312,7 @@
    */
   function renderUserManagement(parent) {
     const section = document.createElement('div');
-    section.className = 'form-container';
-    section.style.marginTop = '40px';
+    section.className = 'admin-section';
     section.innerHTML = `
       <h3>Manage Users</h3>
       <div id="user-list" style="margin-bottom:24px;"></div>
@@ -1313,8 +1439,8 @@
     if (path.endsWith('index.html') || path === '/' || path.endsWith('/')) {
       renderCategoryLinks();
       renderBanner();
-      renderAds();
-      renderCategories();
+      // Render the home page product sections (specials) instead of category highlights
+      renderHomeProducts();
     } else if (path.endsWith('cart.html')) {
       renderCartPage();
     } else if (path.endsWith('history.html')) {
@@ -1333,9 +1459,11 @@
     if (searchInput) {
       searchInput.addEventListener('input', function () {
         searchQuery = searchInput.value.trim();
-        // Re-render categories if the section exists
-        if (document.getElementById('categories')) {
-          renderCategories();
+        // Update suggestions dropdown
+        updateSearchSuggestions();
+        // Re-render home products if on the index page
+        if (document.getElementById('products')) {
+          renderHomeProducts();
         }
       });
     }
@@ -1345,13 +1473,75 @@
     if (searchBtn && searchInput) {
       searchBtn.addEventListener('click', function () {
         searchQuery = searchInput.value.trim();
-        if (document.getElementById('categories')) {
-          renderCategories();
+        updateSearchSuggestions();
+        if (document.getElementById('products')) {
+          renderHomeProducts();
         }
       });
     }
+
+    // Hide search suggestions when clicking outside the search box
+    document.addEventListener('click', function (e) {
+      const suggestions = document.getElementById('search-suggestions');
+      const searchBox = document.querySelector('.search-box');
+      if (suggestions && searchBox && !searchBox.contains(e.target)) {
+        suggestions.style.display = 'none';
+      }
+    });
   }
 
   // Run init once DOM is loaded
   document.addEventListener('DOMContentLoaded', init);
+
+  /**
+   * Update the search suggestions dropdown. This function reads the
+   * current query from the search input and finds matching items
+   * across all categories. Each suggestion displays the product
+   * image (thumbnail) and name. Clicking a suggestion takes the
+   * user to the corresponding category page. The suggestions box is
+   * hidden when there is no query or no matches.
+   */
+  function updateSearchSuggestions() {
+    const searchInput = document.getElementById('search-input');
+    const suggestions = document.getElementById('search-suggestions');
+    if (!searchInput || !suggestions) return;
+    const query = searchInput.value.trim().toLowerCase();
+    suggestions.innerHTML = '';
+    if (!query) {
+      suggestions.style.display = 'none';
+      return;
+    }
+    const matches = [];
+    categoriesData.forEach(cat => {
+      cat.items.forEach(item => {
+        if (item.name.toLowerCase().includes(query)) {
+          matches.push({
+            catId: cat.id,
+            itemId: item.id,
+            name: item.name,
+            image: item.image
+          });
+        }
+      });
+    });
+    // Limit number of suggestions to 6
+    const limited = matches.slice(0, 6);
+    limited.forEach(match => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      const img = document.createElement('img');
+      img.src = match.image;
+      img.alt = match.name;
+      div.appendChild(img);
+      const span = document.createElement('span');
+      span.textContent = match.name;
+      div.appendChild(span);
+      div.addEventListener('click', function () {
+        // Navigate to category page for the item
+        window.location.href = 'category.html?cat=' + match.catId;
+      });
+      suggestions.appendChild(div);
+    });
+    suggestions.style.display = limited.length > 0 ? 'block' : 'none';
+  }
 })();
