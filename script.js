@@ -175,8 +175,11 @@
     const container = document.getElementById('category-links');
     if (!container) return;
     let html = '';
+    // Link to dedicated category page. When a link is clicked it will load
+    // category.html with the appropriate query string. This allows full
+    // category views separate from the home page ads.
     categoriesData.forEach(cat => {
-      html += `<a href="#category-${cat.id}">${cat.name}</a>`;
+      html += `<a href="category.html?cat=${cat.id}">${cat.name}</a>`;
     });
     container.innerHTML = html;
   }
@@ -200,6 +203,10 @@
    * "Add to Cart" button will update localStorage and the cart count.
    */
   function renderCategories() {
+    // On the home page, render each category as a small advertisement
+    // highlight with one or two products. This function also honours
+    // the search query: if the query is present, it will filter
+    // products across all categories and show matching items.
     const categoriesSection = document.getElementById('categories');
     if (!categoriesSection) return;
     categoriesSection.innerHTML = '';
@@ -210,33 +217,50 @@
         ? cat.items
         : cat.items.filter(item => item.name.toLowerCase().includes(query));
       if (!itemsToShow || itemsToShow.length === 0) return;
+      // Create category highlight container
       const catDiv = document.createElement('div');
-      catDiv.className = 'category';
-      catDiv.id = `category-${cat.id}`;
-      catDiv.innerHTML = `<h2 class="category-title">${cat.name}</h2>`;
-      const grid = document.createElement('div');
-      grid.className = 'product-grid';
-      itemsToShow.forEach(item => {
+      catDiv.className = 'category-highlight';
+      // Title links to the full category page
+      catDiv.innerHTML = `<div class="highlight-header"><h2>${cat.name}</h2><a class="view-all" href="category.html?cat=${cat.id}">View all</a></div>`;
+      const itemsWrapper = document.createElement('div');
+      itemsWrapper.className = 'highlight-items';
+      // Show at most 2 items to act as advertisement
+      itemsToShow.slice(0, 2).forEach(item => {
         const card = document.createElement('div');
-        card.className = 'product-card';
+        card.className = 'highlight-card';
         card.innerHTML = `
           <img src="${item.image}" alt="${item.name}">
-          <div class="product-name">${item.name}</div>
-          <div class="product-price">KWD ${item.price}</div>
-          <button class="btn add-cart" data-cat="${cat.id}" data-id="${item.id}">Add to Cart</button>
+          <div class="highlight-details">
+            <div class="highlight-name">${item.name}</div>
+            <div class="highlight-price">KWD ${item.price}</div>
+            <div class="highlight-qty">
+              <label>Qty:</label>
+              <input type="number" min="1" value="1" class="qty-input" style="width:60px;">
+            </div>
+            <button class="btn add-cart" data-cat="${cat.id}" data-id="${item.id}">Add to Cart</button>
+          </div>
         `;
-        grid.appendChild(card);
+        itemsWrapper.appendChild(card);
       });
-      catDiv.appendChild(grid);
+      catDiv.appendChild(itemsWrapper);
       categoriesSection.appendChild(catDiv);
     });
-    // Attach event listeners for add to cart buttons using event delegation
+    // Event delegation for Add to Cart buttons inside highlights
     categoriesSection.addEventListener('click', function (e) {
       const btn = e.target.closest('button.add-cart');
       if (btn && btn.dataset.cat) {
         const categoryId = parseInt(btn.dataset.cat);
         const itemId = parseInt(btn.dataset.id);
-        addToCart(categoryId, itemId);
+        // Get quantity from the nearest input
+        let qty = 1;
+        const parent = btn.closest('.highlight-card');
+        if (parent) {
+          const input = parent.querySelector('.qty-input');
+          if (input) {
+            qty = parseInt(input.value) || 1;
+          }
+        }
+        addToCart(categoryId, itemId, qty);
       }
     });
   }
@@ -244,13 +268,16 @@
   /**
    * Add item to cart. If the item already exists, increment quantity.
    */
-  function addToCart(categoryId, itemId) {
+  function addToCart(categoryId, itemId, qty = 1) {
+    // Adds a product to the cart. If it already exists, increase its
+    // quantity by the provided amount instead of just incrementing by one.
+    const quantity = qty && qty > 0 ? parseInt(qty) : 1;
     const cart = getCart();
     const existing = cart.find(ci => ci.categoryId === categoryId && ci.itemId === itemId);
     if (existing) {
-      existing.quantity += 1;
+      existing.quantity += quantity;
     } else {
-      cart.push({ categoryId, itemId, quantity: 1 });
+      cart.push({ categoryId, itemId, quantity });
     }
     saveCart(cart);
     renderAuthLinks();
@@ -431,6 +458,67 @@
   }
 
   /**
+   * Render a single category page. The page URL should include a
+   * query parameter `cat=<id>`. This view lists all products in the
+   * selected category with quantity selectors and add-to-cart buttons.
+   */
+  function renderCategoryPage() {
+    const container = document.getElementById('category-items');
+    if (!container) return;
+    const params = new URLSearchParams(window.location.search);
+    const catParam = params.get('cat');
+    const catId = catParam ? parseInt(catParam) : NaN;
+    const category = categoriesData.find(c => c.id === catId);
+    if (!category) {
+      container.innerHTML = '<p>Category not found.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    // Category title
+    const title = document.createElement('h2');
+    title.textContent = category.name;
+    container.appendChild(title);
+    // Items list
+    const list = document.createElement('div');
+    list.className = 'category-item-grid';
+    category.items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'category-item-card';
+      card.innerHTML = `
+        <img src="${item.image}" alt="${item.name}">
+        <div class="category-item-info">
+          <div class="category-item-name">${item.name}</div>
+          <div class="category-item-price">KWD ${item.price}</div>
+          <div class="category-item-desc">${item.description}</div>
+          <div class="category-item-qty">
+            <label>Qty:</label>
+            <input type="number" min="1" value="1" class="qty-input">
+          </div>
+          <button class="btn add-to-cart" data-cat="${category.id}" data-id="${item.id}">Add to Cart</button>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+    container.appendChild(list);
+    // Attach event listener for adding to cart
+    container.addEventListener('click', function (e) {
+      const btn = e.target.closest('button.add-to-cart');
+      if (!btn || !btn.dataset.cat) return;
+      const catId2 = parseInt(btn.dataset.cat);
+      const itemId2 = parseInt(btn.dataset.id);
+      let qty = 1;
+      const parent = btn.closest('.category-item-card');
+      if (parent) {
+        const input = parent.querySelector('.qty-input');
+        if (input) {
+          qty = parseInt(input.value) || 1;
+        }
+      }
+      addToCart(catId2, itemId2, qty);
+    });
+  }
+
+  /**
    * Handle user registration on the register page.
    */
   function handleRegister() {
@@ -603,13 +691,17 @@
     management.className = 'form-container';
     management.style.marginTop = '40px';
     management.innerHTML = `<h3>Manage Categories & Products</h3>`;
-    // Add new category form
+    // Add new category form with image upload option
     const addCatForm = document.createElement('form');
     addCatForm.id = 'add-category-form';
     addCatForm.innerHTML = `
       <div class="form-group">
         <label for="new-category-name">New Category Name</label>
         <input type="text" id="new-category-name" required>
+      </div>
+      <div class="form-group">
+        <label for="new-category-image">Category Image (optional)</label>
+        <input type="file" id="new-category-image" accept="image/*">
       </div>
       <button type="submit" class="btn">Add Category</button>
     `;
@@ -628,7 +720,23 @@
         catDiv.style.border = '1px solid #333';
         catDiv.style.padding = '12px';
         catDiv.style.marginBottom = '16px';
-        catDiv.innerHTML = `<strong>${cat.name}</strong> (ID: ${cat.id}) <button class="btn" data-action="delete-cat" data-id="${cat.id}">Delete Category</button>`;
+        // Display category image if provided
+        let catImg = '';
+        if (cat.image) {
+          catImg = `<img src="${cat.image}" alt="${cat.name}" style="width:48px;height:48px;object-fit:cover;margin-right:8px;border-radius:4px;">`;
+        }
+        catDiv.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;">
+              ${catImg}
+              <strong>${cat.name}</strong> (ID: ${cat.id})
+            </div>
+            <div>
+              <button class="btn" data-action="edit-cat" data-id="${cat.id}">Edit Name</button>
+              <button class="btn" data-action="delete-cat" data-id="${cat.id}">Delete Category</button>
+            </div>
+          </div>
+        `;
         // Products table for this category
         const itemList = document.createElement('div');
         cat.items.forEach(item => {
@@ -638,7 +746,7 @@
           itemDiv.innerHTML = `
             <div><strong>${item.name}</strong> – KWD ${item.price}</div>
             <div>Description: ${item.description}</div>
-            <div>Image URL: <a href="${item.image}" target="_blank">${item.image}</a></div>
+            <div>Image: <a href="${item.image}" target="_blank">${item.image.substring(0,50)}${item.image.length > 50 ? '...' : ''}</a></div>
             <button class="btn" data-action="edit-item" data-cat="${cat.id}" data-id="${item.id}">Edit</button>
             <button class="btn" data-action="delete-item" data-cat="${cat.id}" data-id="${item.id}">Delete</button>
           `;
@@ -656,25 +764,40 @@
       });
     }
     refreshCategoryList();
-    // Add new category handler
+    // Add new category handler with optional image upload
     addCatForm.addEventListener('submit', function (e) {
       e.preventDefault();
       const name = addCatForm.querySelector('#new-category-name').value.trim();
+      const fileInput = addCatForm.querySelector('#new-category-image');
       if (!name) {
         alert('Category name required');
         return;
       }
       const newId = categoriesData.length ? Math.max(...categoriesData.map(c => c.id)) + 1 : 1;
-      categoriesData.push({ id: newId, name, items: [] });
-      saveCategories(categoriesData);
-      refreshCategoryList();
-      addCatForm.reset();
+      const file = fileInput && fileInput.files && fileInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function () {
+          const dataUrl = reader.result;
+          categoriesData.push({ id: newId, name, items: [], image: dataUrl });
+          saveCategories(categoriesData);
+          refreshCategoryList();
+          addCatForm.reset();
+        };
+        reader.readAsDataURL(file);
+      } else {
+        categoriesData.push({ id: newId, name, items: [], image: '' });
+        saveCategories(categoriesData);
+        refreshCategoryList();
+        addCatForm.reset();
+      }
     });
-    // Handle clicks on category list (delete, add item, edit item, delete item)
+    // Handle clicks on category list (delete, edit, add item, edit item, delete item)
     catList.addEventListener('click', function (e) {
       const btn = e.target.closest('button');
       if (!btn || !btn.dataset.action) return;
       const action = btn.dataset.action;
+      // For delete-cat and edit-cat, the id is in data-id; for items it's in data-cat
       const categoryId = parseInt(btn.dataset.cat || btn.dataset.id);
       if (action === 'delete-cat') {
         if (!confirm('Are you sure you want to delete this category?')) return;
@@ -683,6 +806,16 @@
           categoriesData.splice(idx, 1);
           saveCategories(categoriesData);
           refreshCategoryList();
+        }
+      } else if (action === 'edit-cat') {
+        const cat = categoriesData.find(c => c.id === categoryId);
+        if (cat) {
+          const newName = prompt('Enter new category name', cat.name);
+          if (newName && newName.trim()) {
+            cat.name = newName.trim();
+            saveCategories(categoriesData);
+            refreshCategoryList();
+          }
         }
       } else if (action === 'add-item') {
         showItemForm(null, categoryId);
@@ -734,12 +867,16 @@
             <input type="text" id="item-name" value="${existingItem ? existingItem.name : ''}" required>
           </div>
           <div class="form-group">
-            <label for="item-price">Price</label>
+            <label for="item-price">Price (KWD)</label>
             <input type="number" step="0.01" id="item-price" value="${existingItem ? existingItem.price : ''}" required>
           </div>
           <div class="form-group">
-            <label for="item-image">Image URL</label>
-            <input type="text" id="item-image" value="${existingItem ? existingItem.image : ''}" required>
+            <label for="item-image-file">Upload Image (optional)</label>
+            <input type="file" id="item-image-file" accept="image/*">
+          </div>
+          <div class="form-group">
+            <label for="item-image">Image URL (optional)</label>
+            <input type="text" id="item-image" value="${existingItem ? existingItem.image : ''}">
           </div>
           <div class="form-group">
             <label for="item-desc">Description</label>
@@ -755,25 +892,41 @@
       itemForm.addEventListener('submit', function (e) {
         e.preventDefault();
         const name = itemForm.querySelector('#item-name').value.trim();
-        const price = itemForm.querySelector('#item-price').value;
-        const image = itemForm.querySelector('#item-image').value.trim();
+        const priceVal = itemForm.querySelector('#item-price').value;
+        const urlInput = itemForm.querySelector('#item-image').value.trim();
+        const fileInput = itemForm.querySelector('#item-image-file');
         const desc = itemForm.querySelector('#item-desc').value.trim();
-        if (!name || !price || !image || !desc) {
-          alert('All fields are required');
+        if (!name || !priceVal || !desc) {
+          alert('Please fill out all required fields');
           return;
         }
-        if (existingItem) {
-          existingItem.name = name;
-          existingItem.price = parseFloat(price).toFixed(2);
-          existingItem.image = image;
-          existingItem.description = desc;
-        } else {
-          const newId = cat.items.length ? Math.max(...cat.items.map(i => i.id)) + 1 : 1;
-          cat.items.push({ id: newId, name, price: parseFloat(price).toFixed(2), image, description: desc });
+        const price = parseFloat(priceVal).toFixed(2);
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        function finishAdd(imageSrc) {
+          if (existingItem) {
+            existingItem.name = name;
+            existingItem.price = price;
+            existingItem.image = imageSrc;
+            existingItem.description = desc;
+          } else {
+            const newId = cat.items.length ? Math.max(...cat.items.map(i => i.id)) + 1 : 1;
+            cat.items.push({ id: newId, name, price, image: imageSrc, description: desc });
+          }
+          saveCategories(categoriesData);
+          refreshCategoryList();
+          document.body.removeChild(overlay);
         }
-        saveCategories(categoriesData);
-        refreshCategoryList();
-        document.body.removeChild(overlay);
+        if (file) {
+          const reader2 = new FileReader();
+          reader2.onload = function () {
+            finishAdd(reader2.result);
+          };
+          reader2.readAsDataURL(file);
+        } else if (urlInput) {
+          finishAdd(urlInput);
+        } else {
+          alert('Please provide an image via upload or URL');
+        }
       });
       formContainer.querySelector('#cancel-item-form').addEventListener('click', function () {
         document.body.removeChild(overlay);
@@ -802,6 +955,8 @@
       handleRegister();
     } else if (path.endsWith('admin.html')) {
       renderAdminPage();
+    } else if (path.endsWith('category.html')) {
+      renderCategoryPage();
     }
     // Attach search listener on any page that has the search input
     const searchInput = document.getElementById('search-input');
