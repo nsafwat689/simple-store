@@ -7,19 +7,32 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Navigation bar -->
-  <nav class="nav">
-    <div class="nav-left">
+  <!-- Header with top bar, main header and category bar -->
+  <header>
+    <!-- Top bar for contact and quick links -->
+    <div class="top-bar">
+      <div class="contact-info">+2 (02) 2322 6050</div>
+      <div class="top-links" id="top-links">
+        <!-- Filled dynamically with account links -->
+      </div>
+    </div>
+    <!-- Main header with logo, search and cart summary -->
+    <div class="header-main">
       <a href="index.html" class="logo">SimpleStore</a>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search products...">
+        <button id="search-btn">Search</button>
+      </div>
+      <div class="cart-summary" id="cart-summary">0 item(s) - KWD 0.00</div>
     </div>
-    <div class="nav-search">
-      <input type="text" id="search-input" placeholder="Search products...">
-    </div>
-    <div class="nav-center" id="category-links"></div>
-    <div class="nav-right" id="auth-links">
-      <!-- Filled dynamically based on login state -->
-    </div>
-  </nav>
+    <!-- Category navigation bar -->
+    <nav class="categories-bar" id="category-links">
+      <!-- Category links inserted via script -->
+    </nav>
+  </header>
+
+  <!-- Main content wrapper -->
+  <div class="main-content">
 
   <!-- Hero section with floating package -->
   <section class="hero">
@@ -33,6 +46,11 @@
     </div>
   </section>
 
+  <!-- Banner slider -->
+  <section id="banner" class="banner">
+    <!-- Slides inserted via script -->
+  </section>
+
   <!-- Advertisement panel -->
   <section class="ads">
     <div class="ads-container" id="ads-container">
@@ -44,6 +62,7 @@
   <section id="categories" class="categories">
     <!-- Categories inserted via script -->
   </section>
+  </div> <!-- end of main-content -->
 
   <script src="script.js"></script>
 </body>

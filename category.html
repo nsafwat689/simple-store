@@ -7,24 +7,34 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Navigation bar -->
-  <nav class="nav">
-    <div class="nav-left">
+  <!-- Header matching voipegypt style -->
+  <header>
+    <!-- Top bar -->
+    <div class="top-bar">
+      <div class="contact-info">+2 (02) 2322 6050</div>
+      <div class="top-links" id="top-links">
+        <!-- Filled dynamically with account links -->
+      </div>
+    </div>
+    <!-- Main header: logo, search, cart summary -->
+    <div class="header-main">
       <a href="index.html" class="logo">SimpleStore</a>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search products...">
+        <button id="search-btn">Search</button>
+      </div>
+      <div class="cart-summary" id="cart-summary">0 item(s) - KWD 0.00</div>
     </div>
-    <div class="nav-search">
-      <input type="text" id="search-input" placeholder="Search products...">
+    <!-- Categories bar -->
+    <nav class="categories-bar" id="category-links">
+      <!-- filled via script -->
+    </nav>
+  </header>
+  <!-- Main content -->
+  <div class="main-content">
+    <div class="categories" id="category-page">
+      <div id="category-items"></div>
     </div>
-    <div class="nav-center" id="category-links">
-      <!-- Category links filled via script -->
-    </div>
-    <div class="nav-right" id="auth-links">
-      <!-- Auth/cart links rendered dynamically -->
-    </div>
-  </nav>
-
-  <div class="categories" id="category-page">
-    <div id="category-items"></div>
   </div>
 
   <script src="script.js"></script>

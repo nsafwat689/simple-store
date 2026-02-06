@@ -31,6 +31,20 @@
   ];
 
   /**
+   * Banner image storage. Banners are used for the home page slider and
+   * stored in localStorage as an array of data URIs. Up to 10 images
+   * can be stored. Admin page allows adding, deleting, moving and
+   * replacing these images.
+   */
+  function getBannerImages() {
+    const imgs = localStorage.getItem('banners');
+    return imgs ? JSON.parse(imgs) : [];
+  }
+  function saveBannerImages(imgs) {
+    localStorage.setItem('banners', JSON.stringify(imgs || []));
+  }
+
+  /**
    * Utility functions for localStorage operations
    */
   function getUsers() {
@@ -69,6 +83,87 @@
       users.push(user);
     }
     saveUsers(users);
+  }
+
+  /**
+   * Render the home page banner slider. If no images are present in
+   * localStorage, the banner section will be hidden. Otherwise,
+   * cycle through images every few seconds. Each slide fills the
+   * available container width.
+   */
+  function renderBanner() {
+    const banner = document.getElementById('banner');
+    if (!banner) return;
+    const images = getBannerImages();
+    if (!images || images.length === 0) {
+      banner.innerHTML = '';
+      return;
+    }
+    const slider = document.createElement('div');
+    slider.className = 'banner-slider';
+    images.forEach((src, idx) => {
+      const slide = document.createElement('div');
+      slide.className = 'banner-slide';
+      if (idx === 0) slide.classList.add('active');
+      slide.innerHTML = `<img src="${src}" alt="Banner ${idx + 1}">`;
+      slider.appendChild(slide);
+    });
+    banner.innerHTML = '';
+    banner.appendChild(slider);
+    const slides = slider.children;
+    let current = 0;
+    if (slides.length > 1) {
+      setInterval(() => {
+        slides[current].classList.remove('active');
+        current = (current + 1) % slides.length;
+        slides[current].classList.add('active');
+      }, 5000);
+    }
+  }
+
+  /**
+   * Initialize the side panel: attach toggle and close listeners
+   * and handle translating the main content and body classes. This
+   * should be invoked on every page with a menu toggle element.
+   */
+  function setupSidePanel() {
+    const toggle = document.getElementById('menu-toggle');
+    const panel = document.getElementById('side-panel');
+    if (!toggle || !panel) return;
+    const closeBtn = panel.querySelector('.close-btn');
+    toggle.addEventListener('click', () => {
+      const open = panel.classList.contains('open');
+      if (open) {
+        panel.classList.remove('open');
+        document.body.classList.remove('panel-open');
+      } else {
+        panel.classList.add('open');
+        document.body.classList.add('panel-open');
+      }
+    });
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        panel.classList.remove('open');
+        document.body.classList.remove('panel-open');
+      });
+    }
+    // Close panel when clicking a link inside
+    panel.addEventListener('click', function (e) {
+      if (e.target.tagName === 'A') {
+        panel.classList.remove('open');
+        document.body.classList.remove('panel-open');
+      }
+    });
+  }
+
+  /**
+   * Render links into the side panel. Uses the same category data
+   * as the top navigation but displayed vertically. Should be
+   * called whenever categories are created, deleted or renamed.
+   */
+  function renderSideCategoryLinks() {
+    // Deprecated: side panel has been removed. No action required.
+    return;
   }
 
   /**
@@ -138,34 +233,58 @@
    * be called whenever the page loads or when cart/user state changes.
    */
   function renderAuthLinks() {
-    const authContainer = document.getElementById('auth-links');
-    if (!authContainer) return;
-    const username = getLoggedInUser();
+    // Populate the top-links container with account options based on login state
+    const topLinks = document.getElementById('top-links');
+    if (topLinks) {
+      const username = getLoggedInUser();
+      let html = '';
+      const wishCount = 0; // placeholder for wish list count
+      if (username) {
+        const user = getUserByUsername(username);
+        const displayName = user && user.fullName ? user.fullName : username;
+        // My Account dropdown replaced with direct links
+        html += `<a href="history.html">Orders</a>`;
+        html += `<a href="cart.html">Shopping Cart</a>`;
+        html += `<a href="cart.html">Checkout</a>`;
+        html += `<span class="welcome">Hi, ${displayName}</span>`;
+        html += `<a href="#" id="logout-link">Logout</a>`;
+      } else {
+        html += `<a href="login.html">Login</a>`;
+        html += `<a href="register.html">Register</a>`;
+        html += `<a href="cart.html">Shopping Cart</a>`;
+        html += `<a href="cart.html">Checkout</a>`;
+      }
+      // Wish list placeholder
+      html += `<a href="#">Wish List (${wishCount})</a>`;
+      topLinks.innerHTML = html;
+      const logoutLink = document.getElementById('logout-link');
+      if (logoutLink) {
+        logoutLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          setLoggedInUser(null);
+          window.location.href = 'index.html';
+        });
+      }
+    }
+    // Update the cart summary bar
+    updateCartSummary();
+  }
+
+  /**
+   * Update the cart summary displayed in the header. Shows number of items
+   * and total price in KWD. Called whenever cart state changes or page loads.
+   */
+  function updateCartSummary() {
+    const summaryEl = document.getElementById('cart-summary');
+    if (!summaryEl) return;
     const cart = getCart();
-    const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-    let html = '';
-    if (username) {
-      // Determine display name: use fullName if provided
-      const user = getUserByUsername(username);
-      const displayName = user && user.fullName ? user.fullName : username;
-      html += `<a href="history.html">Orders</a>`;
-      html += `<a href="cart.html" class="cart-count" data-count="${cartCount}">Cart</a>`;
-      html += `<span class="welcome">Hi, ${displayName}</span>`;
-      html += `<a href="#" id="logout-link">Logout</a>`;
-    } else {
-      html += `<a href="login.html">Login</a>`;
-      html += `<a href="register.html">Register</a>`;
-      html += `<a href="cart.html" class="cart-count" data-count="${cartCount}">Cart</a>`;
-    }
-    authContainer.innerHTML = html;
-    const logoutLink = document.getElementById('logout-link');
-    if (logoutLink) {
-      logoutLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        setLoggedInUser(null);
-        window.location.reload();
-      });
-    }
+    let count = 0;
+    let total = 0;
+    cart.forEach(item => {
+      count += item.quantity;
+      total += item.price * item.quantity;
+    });
+    summaryEl.textContent = `${count} item(s) - KWD ${total.toFixed(2)}`;
   }
 
   /**
@@ -543,7 +662,7 @@
         alert('Username already exists');
         return;
       }
-      // Create user object with extended information
+      // Create user object with extended information and default blocked flag
       const user = {
         username,
         fullName,
@@ -551,7 +670,8 @@
         phone,
         address,
         password,
-        history: []
+        history: [],
+        blocked: false
       };
       saveUser(user);
       setLoggedInUser(username);
@@ -573,6 +693,10 @@
       const user = getUserByUsername(username);
       if (!user || user.password !== password) {
         alert('Invalid credentials');
+        return;
+      }
+      if (user.blocked) {
+        alert('Your account has been blocked. Please contact support.');
         return;
       }
       setLoggedInUser(username);
@@ -783,6 +907,9 @@
           saveCategories(categoriesData);
           refreshCategoryList();
           addCatForm.reset();
+          // update category links in nav and side panel
+          renderCategoryLinks();
+          renderSideCategoryLinks();
         };
         reader.readAsDataURL(file);
       } else {
@@ -790,6 +917,8 @@
         saveCategories(categoriesData);
         refreshCategoryList();
         addCatForm.reset();
+        renderCategoryLinks();
+        renderSideCategoryLinks();
       }
     });
     // Handle clicks on category list (delete, edit, add item, edit item, delete item)
@@ -802,10 +931,13 @@
       if (action === 'delete-cat') {
         if (!confirm('Are you sure you want to delete this category?')) return;
         const idx = categoriesData.findIndex(c => c.id === categoryId);
-        if (idx !== -1) {
+      if (idx !== -1) {
           categoriesData.splice(idx, 1);
           saveCategories(categoriesData);
           refreshCategoryList();
+          // update nav and side panel links
+          renderCategoryLinks();
+          renderSideCategoryLinks();
         }
       } else if (action === 'edit-cat') {
         const cat = categoriesData.find(c => c.id === categoryId);
@@ -815,6 +947,8 @@
             cat.name = newName.trim();
             saveCategories(categoriesData);
             refreshCategoryList();
+            renderCategoryLinks();
+            renderSideCategoryLinks();
           }
         }
       } else if (action === 'add-item') {
@@ -932,6 +1066,240 @@
         document.body.removeChild(overlay);
       });
     }
+
+    // After category management, render banner and user management sections
+    renderBannerAdmin(container);
+    renderUserManagement(container);
+  }
+
+  /**
+   * Render banner management section in the admin dashboard. Allows
+   * uploading up to 10 images for the home page banner slider,
+   * deleting images and moving them up or down in the order. Images
+   * are stored as Data URIs in localStorage.
+   */
+  function renderBannerAdmin(parent) {
+    // Create section container
+    const section = document.createElement('div');
+    section.className = 'form-container';
+    section.style.marginTop = '40px';
+    section.innerHTML = `
+      <h3>Manage Home Banners</h3>
+      <form id="add-banner-form">
+        <div class="form-group">
+          <label for="banner-files">Upload Banner Images (max 10)</label>
+          <input type="file" id="banner-files" accept="image/*" multiple>
+        </div>
+        <button type="submit" class="btn">Add Images</button>
+      </form>
+      <div id="banner-list" style="margin-top:24px;"></div>
+    `;
+    parent.appendChild(section);
+    const addForm = section.querySelector('#add-banner-form');
+    const bannerListDiv = section.querySelector('#banner-list');
+    function refreshBannerList() {
+      const banners = getBannerImages();
+      bannerListDiv.innerHTML = '';
+      if (!banners || banners.length === 0) {
+        bannerListDiv.innerHTML = '<p>No banner images uploaded.</p>';
+        return;
+      }
+      banners.forEach((src, idx) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '12px';
+        row.style.marginBottom = '12px';
+        row.innerHTML = `
+          <img src="${src}" alt="Banner ${idx+1}" style="width:80px;height:50px;object-fit:cover;border-radius:4px;">
+          <span>Banner ${idx + 1}</span>
+          <button class="btn" data-action="up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''}>Up</button>
+          <button class="btn" data-action="down" data-index="${idx}" ${idx === banners.length - 1 ? 'disabled' : ''}>Down</button>
+          <button class="btn" data-action="delete" data-index="${idx}">Delete</button>
+        `;
+        bannerListDiv.appendChild(row);
+      });
+    }
+    refreshBannerList();
+    // Add banners
+    addForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const files = addForm.querySelector('#banner-files').files;
+      if (!files || files.length === 0) return;
+      let currentImages = getBannerImages();
+      const filesArr = Array.from(files);
+      // Only allow up to 10 images total
+      if (currentImages.length >= 10) {
+        alert('Maximum of 10 banner images reached. Please delete some before adding more.');
+        return;
+      }
+      const promises = [];
+      filesArr.forEach(file => {
+        if (currentImages.length + promises.length >= 10) return;
+        const reader = new FileReader();
+        const p = new Promise(res => {
+          reader.onload = () => res(reader.result);
+        });
+        reader.readAsDataURL(file);
+        promises.push(p);
+      });
+      Promise.all(promises).then(results => {
+        currentImages = currentImages.concat(results);
+        saveBannerImages(currentImages);
+        refreshBannerList();
+        addForm.reset();
+      });
+    });
+    // Banner list actions
+    bannerListDiv.addEventListener('click', function (e) {
+      const btn = e.target.closest('button');
+      if (!btn || !btn.dataset.action) return;
+      const action = btn.dataset.action;
+      const index = parseInt(btn.dataset.index);
+      let banners = getBannerImages();
+      if (action === 'delete') {
+        banners.splice(index, 1);
+        saveBannerImages(banners);
+        refreshBannerList();
+      } else if (action === 'up' && index > 0) {
+        const temp = banners[index - 1];
+        banners[index - 1] = banners[index];
+        banners[index] = temp;
+        saveBannerImages(banners);
+        refreshBannerList();
+      } else if (action === 'down' && index < banners.length - 1) {
+        const temp = banners[index + 1];
+        banners[index + 1] = banners[index];
+        banners[index] = temp;
+        saveBannerImages(banners);
+        refreshBannerList();
+      }
+    });
+  }
+
+  /**
+   * Render user management section in the admin dashboard. This allows
+   * the admin to view all registered users, block/unblock them,
+   * delete users and add new users manually. Blocked users will not
+   * be able to log in.
+   */
+  function renderUserManagement(parent) {
+    const section = document.createElement('div');
+    section.className = 'form-container';
+    section.style.marginTop = '40px';
+    section.innerHTML = `
+      <h3>Manage Users</h3>
+      <div id="user-list" style="margin-bottom:24px;"></div>
+      <h4>Add New User</h4>
+      <form id="add-user-form">
+        <div class="form-group">
+          <label for="add-full-name">Full Name</label>
+          <input type="text" id="add-full-name" required>
+        </div>
+        <div class="form-group">
+          <label for="add-username">Username</label>
+          <input type="text" id="add-username" required>
+        </div>
+        <div class="form-group">
+          <label for="add-email">Email</label>
+          <input type="email" id="add-email" required>
+        </div>
+        <div class="form-group">
+          <label for="add-phone">Phone</label>
+          <input type="tel" id="add-phone" required>
+        </div>
+        <div class="form-group">
+          <label for="add-address">Address</label>
+          <input type="text" id="add-address" required>
+        </div>
+        <div class="form-group">
+          <label for="add-password">Password</label>
+          <input type="password" id="add-password" required>
+        </div>
+        <button type="submit" class="btn">Add User</button>
+      </form>
+    `;
+    parent.appendChild(section);
+    const userListDiv = section.querySelector('#user-list');
+    const addUserForm = section.querySelector('#add-user-form');
+    function refreshUserList() {
+      const users = getUsers();
+      userListDiv.innerHTML = '';
+      if (!users || users.length === 0) {
+        userListDiv.innerHTML = '<p>No users found.</p>';
+        return;
+      }
+      users.forEach(u => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.style.marginBottom = '12px';
+        row.innerHTML = `
+          <div style="flex:1;"><strong>${u.fullName || u.username}</strong> (${u.username}) – ${u.email}</div>
+          <div style="flex:1;">Phone: ${u.phone || '-'} | Addr: ${u.address || '-'}</div>
+          <button class="btn" data-action="${u.blocked ? 'unblock' : 'block'}" data-username="${u.username}">${u.blocked ? 'Unblock' : 'Block'}</button>
+          <button class="btn" data-action="delete" data-username="${u.username}">Delete</button>
+        `;
+        userListDiv.appendChild(row);
+      });
+    }
+    refreshUserList();
+    // Add new user handler
+    addUserForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const fullName = addUserForm.querySelector('#add-full-name').value.trim();
+      const username = addUserForm.querySelector('#add-username').value.trim();
+      const email = addUserForm.querySelector('#add-email').value.trim();
+      const phone = addUserForm.querySelector('#add-phone').value.trim();
+      const address = addUserForm.querySelector('#add-address').value.trim();
+      const password = addUserForm.querySelector('#add-password').value;
+      if (!fullName || !username || !email || !phone || !address || !password) {
+        alert('Please fill out all fields');
+        return;
+      }
+      if (getUserByUsername(username)) {
+        alert('Username already exists');
+        return;
+      }
+      const newUser = {
+        username,
+        fullName,
+        email,
+        phone,
+        address,
+        password,
+        history: [],
+        blocked: false
+      };
+      saveUser(newUser);
+      refreshUserList();
+      addUserForm.reset();
+    });
+    // Handle user list actions
+    userListDiv.addEventListener('click', function (e) {
+      const btn = e.target.closest('button');
+      if (!btn || !btn.dataset.action) return;
+      const username = btn.dataset.username;
+      const action = btn.dataset.action;
+      const users = getUsers();
+      const idx = users.findIndex(u => u.username === username);
+      if (idx === -1) return;
+      if (action === 'delete') {
+        if (!confirm('Delete this user?')) return;
+        users.splice(idx, 1);
+        saveUsers(users);
+        refreshUserList();
+      } else if (action === 'block') {
+        users[idx].blocked = true;
+        saveUsers(users);
+        refreshUserList();
+      } else if (action === 'unblock') {
+        users[idx].blocked = false;
+        saveUsers(users);
+        refreshUserList();
+      }
+    });
   }
 
   /**
@@ -940,9 +1308,11 @@
   function init() {
     // Determine which page we're on by checking the body class or unique element
     renderAuthLinks();
+    // Side panel is no longer used; categories are displayed in the header
     const path = window.location.pathname;
     if (path.endsWith('index.html') || path === '/' || path.endsWith('/')) {
       renderCategoryLinks();
+      renderBanner();
       renderAds();
       renderCategories();
     } else if (path.endsWith('cart.html')) {
@@ -964,6 +1334,17 @@
       searchInput.addEventListener('input', function () {
         searchQuery = searchInput.value.trim();
         // Re-render categories if the section exists
+        if (document.getElementById('categories')) {
+          renderCategories();
+        }
+      });
+    }
+
+    // Handle search button click to trigger search
+    const searchBtn = document.getElementById('search-btn');
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener('click', function () {
+        searchQuery = searchInput.value.trim();
         if (document.getElementById('categories')) {
           renderCategories();
         }
