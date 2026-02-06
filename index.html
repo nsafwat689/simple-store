@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Store</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Navigation bar -->
+  <nav class="nav">
+    <div class="nav-left">
+      <span class="logo">SimpleStore</span>
+    </div>
+    <div class="nav-center" id="category-links"></div>
+    <div class="nav-right" id="auth-links">
+      <!-- Filled dynamically based on login state -->
+    </div>
+  </nav>
+
+  <!-- Hero section with floating package -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Smart Shopping, Bold Experience</h1>
+      <p class="hero-subtitle">Find everything you need in one place</p>
+      <a href="#categories" class="btn hero-btn">Shop Now</a>
+    </div>
+    <div class="hero-image">
+      <img src="assets/package.png" alt="Package" class="floating">
+    </div>
+  </section>
+
+  <!-- Advertisement panel -->
+  <section class="ads">
+    <div class="ads-container" id="ads-container">
+      <!-- Ads items inserted via script -->
+    </div>
+  </section>
+
+  <!-- Categories and products -->
+  <section id="categories" class="categories">
+    <!-- Categories inserted via script -->
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
