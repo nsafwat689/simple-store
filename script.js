@@ -708,6 +708,12 @@
       totalRow.style.marginTop = '8px';
       totalRow.innerHTML = `<strong>Total: KWD ${order.total}</strong>`;
       orderDiv.appendChild(totalRow);
+      // Display order status so the customer knows the current state of their order
+      const statusRow = document.createElement('div');
+      statusRow.style.marginTop = '4px';
+      const statusLabel = order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown';
+      statusRow.innerHTML = `<strong>Status:</strong> ${statusLabel}`;
+      orderDiv.appendChild(statusRow);
       container.appendChild(orderDiv);
     });
   }
@@ -1389,6 +1395,13 @@
       renderOrdersByStatus(cancelledOrdersSection, 'cancelled');
     }
     refreshOrdersSections();
+    // Listen for localStorage changes from other tabs/windows. When orders are updated
+    // (e.g., a new order is placed), refresh the orders sections automatically
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'orders') {
+        refreshOrdersSections();
+      }
+    });
     // Listen for status changes within orders sections
     [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
       sec.addEventListener('change', function (e) {
