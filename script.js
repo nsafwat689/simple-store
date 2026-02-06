@@ -923,13 +923,6 @@
       renderAdminLogin(container);
     });
     header.appendChild(title);
-    // Add Orders link button to quickly navigate to order management
-    const ordersLink = document.createElement('a');
-    ordersLink.href = 'orders.html';
-    ordersLink.textContent = 'Orders';
-    ordersLink.className = 'btn';
-    ordersLink.style.marginLeft = '8px';
-    header.appendChild(ordersLink);
     header.appendChild(logoutBtn);
     container.appendChild(header);
     // Create a menu grid for admin actions. Icons will be added after sections are created.
@@ -1298,14 +1291,128 @@
     itemSection.id = 'section-items';
     bannerSection.id = 'section-banners';
     usersSection.id = 'section-users';
+    /* ---------------------------------------------------------------------
+     * Orders management sections.
+     *
+     * We integrate order management directly into the admin dashboard. Three
+     * separate sections are created for Pending, Shipped and Cancelled orders.
+     * Each section contains a table listing orders of that status. Admins can
+     * update the status via a dropdown; changes persist to localStorage and
+     * the tables refresh automatically.
+     */
+    // Create pending orders section
+    const pendingOrdersSection = document.createElement('div');
+    pendingOrdersSection.className = 'admin-section';
+    pendingOrdersSection.id = 'section-orders-pending';
+    container.appendChild(pendingOrdersSection);
+    // Create shipped orders section
+    const shippedOrdersSection = document.createElement('div');
+    shippedOrdersSection.className = 'admin-section';
+    shippedOrdersSection.id = 'section-orders-shipped';
+    container.appendChild(shippedOrdersSection);
+    // Create cancelled orders section
+    const cancelledOrdersSection = document.createElement('div');
+    cancelledOrdersSection.className = 'admin-section';
+    cancelledOrdersSection.id = 'section-orders-cancelled';
+    container.appendChild(cancelledOrdersSection);
+    // Helper to render a table of orders by status
+    function renderOrdersByStatus(section, status) {
+      const orders = getOrders();
+      section.innerHTML = '';
+      const heading = document.createElement('h3');
+      // Capitalize status for heading
+      heading.textContent = `${status.charAt(0).toUpperCase() + status.slice(1)} Orders`;
+      section.appendChild(heading);
+      const table = document.createElement('table');
+      table.className = 'orders-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>User</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector('tbody');
+      orders
+        .filter(o => o.status === status)
+        .forEach(o => {
+          const tr = document.createElement('tr');
+          // ID
+          const tdId = document.createElement('td');
+          tdId.textContent = o.id;
+          tr.appendChild(tdId);
+          // Date
+          const tdDate = document.createElement('td');
+          tdDate.textContent = o.date;
+          tr.appendChild(tdDate);
+          // User
+          const tdUser = document.createElement('td');
+          tdUser.textContent = o.user;
+          tr.appendChild(tdUser);
+          // Items summary
+          const tdItems = document.createElement('td');
+          const summary = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
+          tdItems.textContent = summary;
+          tr.appendChild(tdItems);
+          // Total
+          const tdTotal = document.createElement('td');
+          tdTotal.textContent = `KD ${parseFloat(o.total).toFixed(2)}`;
+          tr.appendChild(tdTotal);
+          // Status select
+          const tdStatus = document.createElement('td');
+          const select = document.createElement('select');
+          select.className = 'status-select';
+          select.dataset.id = o.id;
+          ['pending','shipped','cancelled'].forEach(optVal => {
+            const opt = document.createElement('option');
+            opt.value = optVal;
+            opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
+            if (optVal === o.status) opt.selected = true;
+            select.appendChild(opt);
+          });
+          tdStatus.appendChild(select);
+          tr.appendChild(tdStatus);
+          tbody.appendChild(tr);
+        });
+      section.appendChild(table);
+    }
+    // Render all orders sections initially
+    function refreshOrdersSections() {
+      renderOrdersByStatus(pendingOrdersSection, 'pending');
+      renderOrdersByStatus(shippedOrdersSection, 'shipped');
+      renderOrdersByStatus(cancelledOrdersSection, 'cancelled');
+    }
+    refreshOrdersSections();
+    // Listen for status changes within orders sections
+    [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
+      sec.addEventListener('change', function (e) {
+        const select = e.target.closest('select.status-select');
+        if (!select) return;
+        const id = parseInt(select.dataset.id);
+        const newStatus = select.value;
+        const orders = getOrders();
+        const idx = orders.findIndex(o => o.id === id);
+        if (idx !== -1) {
+          orders[idx].status = newStatus;
+          saveOrders(orders);
+          refreshOrdersSections();
+        }
+      });
+    });
     // Hide all admin sections initially
-    [pwdSection, catSection, itemSection, bannerSection, usersSection].forEach(sec => {
+    [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
       sec.style.display = 'none';
     });
     // Helper function to toggle sections. For user management, optionally show list or add form.
     function showSection(target) {
       // Hide all top-level sections
-      [pwdSection, catSection, itemSection, bannerSection, usersSection].forEach(sec => {
+      [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
         sec.style.display = 'none';
       });
       if (target === 'password') {
@@ -1331,6 +1438,12 @@
           if (addForm) addForm.style.display = 'block';
           if (addHeader) addHeader.style.display = 'block';
         }
+      } else if (target === 'orders-pending') {
+        pendingOrdersSection.style.display = 'block';
+      } else if (target === 'orders-shipped') {
+        shippedOrdersSection.style.display = 'block';
+      } else if (target === 'orders-cancelled') {
+        cancelledOrdersSection.style.display = 'block';
       }
     }
     // Utility to create a menu item with icon and label
@@ -1354,6 +1467,10 @@
     createMenuItem('🖼️', 'Banners', 'banners');
     createMenuItem('👥', 'Users', 'users-list');
     createMenuItem('➕', 'Add User', 'users-add');
+    // Orders status icons
+    createMenuItem('⌛', 'Pending Orders', 'orders-pending');
+    createMenuItem('✅', 'Shipped Orders', 'orders-shipped');
+    createMenuItem('❌', 'Cancelled Orders', 'orders-cancelled');
   }
 
   /**
