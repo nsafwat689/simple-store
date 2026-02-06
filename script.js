@@ -71,6 +71,21 @@
   function saveCart(cart) {
     localStorage.setItem('cart', JSON.stringify(cart));
   }
+
+  /**
+   * Global orders storage. Orders are stored in localStorage
+   * under the key 'orders'. Each order record contains an id,
+   * date, username, items, total and a status field (pending,
+   * shipped or cancelled). These helper functions retrieve
+   * and persist the orders array.
+   */
+  function getOrders() {
+    const orders = localStorage.getItem('orders');
+    return orders ? JSON.parse(orders) : [];
+  }
+  function saveOrders(orders) {
+    localStorage.setItem('orders', JSON.stringify(orders));
+  }
   function getUserByUsername(username) {
     return getUsers().find(u => u.username === username);
   }
@@ -618,6 +633,8 @@
       const category = categoriesData.find(c => c.id === ci.categoryId);
       const item = category.items.find(it => it.id === ci.itemId);
       return {
+        catId: ci.categoryId,
+        itemId: ci.itemId,
         name: item.name,
         quantity: ci.quantity,
         price: item.price
@@ -627,14 +644,21 @@
     const order = {
       id: Date.now(),
       date: new Date().toLocaleString(),
+      user: username,
       items: orderItems,
       total: total.toFixed(2)
+      ,
+      status: 'pending'
     };
     if (!user.history) {
       user.history = [];
     }
     user.history.push(order);
     saveUser(user);
+    // Persist order in global orders list
+    const allOrders = getOrders();
+    allOrders.push(order);
+    saveOrders(allOrders);
     saveCart([]);
     alert('Thank you for your purchase!');
     window.location.href = 'history.html';
@@ -899,6 +923,13 @@
       renderAdminLogin(container);
     });
     header.appendChild(title);
+    // Add Orders link button to quickly navigate to order management
+    const ordersLink = document.createElement('a');
+    ordersLink.href = 'orders.html';
+    ordersLink.textContent = 'Orders';
+    ordersLink.className = 'btn';
+    ordersLink.style.marginLeft = '8px';
+    header.appendChild(ordersLink);
     header.appendChild(logoutBtn);
     container.appendChild(header);
     // Password change section
@@ -1488,6 +1519,170 @@
   }
 
   /**
+   * Render the orders management page. This page allows the admin
+   * (or authorized staff) to view all orders grouped by status and
+   * update each order's status. If the admin is not logged in,
+   * display the admin login form. Orders are stored in localStorage
+   * and updated using the getOrders/saveOrders helpers.
+   */
+  function renderOrdersPage() {
+    const container = document.querySelector('.orders-container');
+    if (!container) return;
+    // Ensure admin account exists
+    if (!getAdmin()) {
+      saveAdmin({ username: 'admin', password: 'admin123' });
+    }
+    // If admin not logged in, show login form
+    if (!isAdminLoggedIn()) {
+      renderOrdersLogin(container);
+    } else {
+      renderOrdersManagement(container);
+    }
+  }
+
+  // Render admin login form for orders page
+  function renderOrdersLogin(container) {
+    container.innerHTML = '';
+    const form = document.createElement('form');
+    form.id = 'orders-login-form';
+    form.className = 'form-container';
+    form.innerHTML = `
+      <h2>Admin Login</h2>
+      <div class="form-group">
+        <label for="orders-admin-username">Username</label>
+        <input type="text" id="orders-admin-username" name="username" required>
+      </div>
+      <div class="form-group">
+        <label for="orders-admin-password">Password</label>
+        <input type="password" id="orders-admin-password" name="password" required>
+      </div>
+      <button type="submit" class="btn">Log In</button>
+    `;
+    container.appendChild(form);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const username = form.username.value.trim();
+      const password = form.password.value;
+      const admin = getAdmin();
+      if (!admin || admin.username !== username || admin.password !== password) {
+        alert('Invalid admin credentials');
+        return;
+      }
+      setAdminLoggedIn(true);
+      renderOrdersManagement(container);
+    });
+  }
+
+  // Render orders management interface
+  function renderOrdersManagement(container) {
+    container.innerHTML = '';
+    // Header with logout button
+    const header = document.createElement('div');
+    header.className = 'admin-section';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    const title = document.createElement('h2');
+    title.textContent = 'Manage Orders';
+    const logoutBtn = document.createElement('button');
+    logoutBtn.className = 'btn';
+    logoutBtn.textContent = 'Log Out';
+    logoutBtn.addEventListener('click', () => {
+      setAdminLoggedIn(false);
+      renderOrdersLogin(container);
+    });
+    header.appendChild(title);
+    header.appendChild(logoutBtn);
+    container.appendChild(header);
+    // Fetch orders
+    let orders = getOrders();
+    // Group orders by status
+    const statuses = ['pending', 'shipped', 'cancelled'];
+    statuses.forEach(status => {
+      const section = document.createElement('div');
+      section.className = 'admin-section';
+      const heading = document.createElement('h3');
+      heading.textContent = `${status.charAt(0).toUpperCase() + status.slice(1)} Orders`;
+      section.appendChild(heading);
+      // Create table
+      const table = document.createElement('table');
+      table.className = 'orders-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>User</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector('tbody');
+      orders
+        .filter(o => o.status === status)
+        .forEach(o => {
+          const tr = document.createElement('tr');
+          // ID
+          const tdId = document.createElement('td');
+          tdId.textContent = o.id;
+          tr.appendChild(tdId);
+          // Date
+          const tdDate = document.createElement('td');
+          tdDate.textContent = o.date;
+          tr.appendChild(tdDate);
+          // User
+          const tdUser = document.createElement('td');
+          tdUser.textContent = o.user;
+          tr.appendChild(tdUser);
+          // Items summary
+          const tdItems = document.createElement('td');
+          const summary = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
+          tdItems.textContent = summary;
+          tr.appendChild(tdItems);
+          // Total
+          const tdTotal = document.createElement('td');
+          tdTotal.textContent = `KD ${parseFloat(o.total).toFixed(2)}`;
+          tr.appendChild(tdTotal);
+          // Status select
+          const tdStatus = document.createElement('td');
+          const select = document.createElement('select');
+          select.className = 'status-select';
+          select.dataset.id = o.id;
+          ['pending','shipped','cancelled'].forEach(optVal => {
+            const opt = document.createElement('option');
+            opt.value = optVal;
+            opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
+            if (optVal === o.status) opt.selected = true;
+            select.appendChild(opt);
+          });
+          tdStatus.appendChild(select);
+          tr.appendChild(tdStatus);
+          tbody.appendChild(tr);
+        });
+      section.appendChild(table);
+      container.appendChild(section);
+    });
+    // Listen for status change events
+    container.addEventListener('change', function (e) {
+      const select = e.target.closest('select.status-select');
+      if (!select) return;
+      const id = parseInt(select.dataset.id);
+      const newStatus = select.value;
+      orders = getOrders();
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx !== -1) {
+        orders[idx].status = newStatus;
+        saveOrders(orders);
+        // Re-render to reflect changes
+        renderOrdersManagement(container);
+      }
+    });
+  }
+
+  /**
    * Initialize the appropriate functions depending on the current page.
    */
   function init() {
@@ -1510,6 +1705,8 @@
       handleRegister();
     } else if (path.endsWith('admin.html')) {
       renderAdminPage();
+    } else if (path.endsWith('orders.html')) {
+      renderOrdersPage();
     } else if (path.endsWith('category.html')) {
       renderCategoryPage();
     }

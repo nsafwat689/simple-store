@@ -665,6 +665,31 @@ body.panel-open .main-content {
   object-fit: contain;
   border-radius: 4px;
 }
+
+/* Orders table styling for orders management page */
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+}
+.orders-table th,
+.orders-table td {
+  border: 1px solid #e5e5e5;
+  padding: 12px;
+  text-align: left;
+}
+.orders-table th {
+  background: var(--secondary);
+  font-weight: 600;
+}
+/* Status dropdown used to update order status */
+.status-select {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  height: 32px;
+}
 .qty-group {
   display: flex;
   align-items: center;
