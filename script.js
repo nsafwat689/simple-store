@@ -852,8 +852,9 @@
         alert('Your account has been blocked. Please contact support.');
         return;
       }
+      // Persist login without showing an alert. The success message has been removed per latest requirements.
       setLoggedInUser(username);
-      alert('Login successful');
+      // Redirect to home page after successful login without any popup
       window.location.href = 'index.html';
     });
   }
@@ -1382,6 +1383,10 @@
             if (optVal === o.status) opt.selected = true;
             select.appendChild(opt);
           });
+          // Disable status changes for cancelled orders so that once an order is cancelled it cannot be altered
+          if (o.status === 'cancelled') {
+            select.disabled = true;
+          }
           tdStatus.appendChild(select);
           tr.appendChild(tdStatus);
           tbody.appendChild(tr);
@@ -1414,6 +1419,21 @@
         if (idx !== -1) {
           orders[idx].status = newStatus;
           saveOrders(orders);
+          // Also update the status in each user's order history so customers see the latest status
+          const users = getUsers();
+          let updated = false;
+          users.forEach(u => {
+            if (u.history && Array.isArray(u.history)) {
+              const hIdx = u.history.findIndex(ord => ord.id === id);
+              if (hIdx !== -1) {
+                u.history[hIdx].status = newStatus;
+                updated = true;
+              }
+            }
+          });
+          if (updated) {
+            saveUsers(users);
+          }
           refreshOrdersSections();
         }
       });
