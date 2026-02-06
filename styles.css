@@ -1,10 +1,13 @@
 /* Global theme variables */
 :root {
-  --bg: #0d0d0d;
-  --primary: #f2c94c; /* yellow accent similar to Rudiq */
-  --secondary: #1f1f1f;
-  --text: #ffffff;
-  --accent: #ffdd70;
+  /* Light theme similar to modern e‑commerce sites */
+  --bg: #ffffff;        /* overall page background */
+  --primary: #FF9900;   /* Amazon‑style orange accent */
+  --secondary: #f5f5f5; /* light gray panels and cards */
+  --text: #1a1a1a;      /* dark text for readability */
+  --accent: #e47911;    /* darker orange for hover states */
+  --nav-bg: #131921;    /* dark navigation bar background */
+  --nav-text: #ffffff;  /* navigation bar text colour */
 }
 
 body {
@@ -16,34 +19,59 @@ body {
 }
 
 /* Navigation */
+/* Navigation bar styles inspired by Amazon */
 .nav {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 12px 24px;
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background: var(--nav-bg);
+  color: var(--nav-text);
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  gap: 16px;
 }
 
-.nav .logo {
-  font-size: 1.5rem;
+/* Logo styling */
+.nav-left .logo {
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--primary);
+  text-decoration: none;
 }
 
+/* Flex containers for nav sections */
 .nav-center,
 .nav-right {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
+  /* Allow categories to scroll horizontally if there are many */
+  overflow-x: auto;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
 
+/* Search bar */
+.nav-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  max-width: 400px; /* limit search bar width to keep nav items visible */
+}
+.nav-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* Nav links */
 .nav-center a,
 .nav-right a {
-  color: var(--text);
+  color: var(--nav-text);
   text-decoration: none;
   padding: 8px 12px;
   border-radius: 4px;
@@ -51,9 +79,10 @@ body {
   font-size: 0.9rem;
 }
 
+/* Nav hover effect */
 .nav-center a:hover,
 .nav-right a:hover {
-  background: var(--secondary);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Hero */
@@ -62,7 +91,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 80px 24px;
-  background: linear-gradient(180deg, #0d0d0d, #181818);
+  /* Light gradient background */
+  background: linear-gradient(180deg, var(--secondary), var(--bg));
   flex-wrap: wrap;
 }
 
@@ -80,7 +110,7 @@ body {
 .hero-subtitle {
   margin: 16px 0 32px;
   font-size: 1.1rem;
-  color: #cccccc;
+  color: #666666;
 }
 
 .hero-btn {
@@ -283,7 +313,7 @@ body {
 .form-container {
   max-width: 400px;
   margin: 80px auto;
-  background: var(--secondary);
+  background: #ffffff;
   padding: 32px;
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
@@ -305,7 +335,7 @@ body {
 .form-group label {
   margin-bottom: 6px;
   font-size: 0.9rem;
-  color: #dddddd;
+  color: #555555;
 }
 
 .form-group input {
@@ -342,7 +372,7 @@ body {
 .cart-container {
   max-width: 800px;
   margin: 80px auto;
-  background: var(--secondary);
+  background: #ffffff;
   padding: 32px;
   border-radius: 8px;
   color: var(--text);
@@ -381,10 +411,19 @@ body {
   color: var(--accent);
 }
 
+/* Payment method note on cart page */
+.payment-method {
+  margin-top: 8px;
+  text-align: right;
+  font-size: 0.9rem;
+  font-style: italic;
+  color: #555;
+}
+
 .history-container {
   max-width: 800px;
   margin: 80px auto;
-  background: var(--secondary);
+  background: #ffffff;
   padding: 32px;
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);

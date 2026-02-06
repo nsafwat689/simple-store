@@ -127,6 +127,13 @@
   }
 
   /**
+   * Current search query used to filter products on the home page. When
+   * empty, all products are shown. Updated via the search input in
+   * the navigation bar.
+   */
+  let searchQuery = '';
+
+  /**
    * Render the auth and cart links in the navigation bar. This should
    * be called whenever the page loads or when cart/user state changes.
    */
@@ -138,9 +145,12 @@
     const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
     let html = '';
     if (username) {
-      html += `<a href="history.html">History</a>`;
+      // Determine display name: use fullName if provided
+      const user = getUserByUsername(username);
+      const displayName = user && user.fullName ? user.fullName : username;
+      html += `<a href="history.html">Orders</a>`;
       html += `<a href="cart.html" class="cart-count" data-count="${cartCount}">Cart</a>`;
-      html += `<span class="welcome">Hi, ${username}</span>`;
+      html += `<span class="welcome">Hi, ${displayName}</span>`;
       html += `<a href="#" id="logout-link">Logout</a>`;
     } else {
       html += `<a href="login.html">Login</a>`;
@@ -193,20 +203,26 @@
     const categoriesSection = document.getElementById('categories');
     if (!categoriesSection) return;
     categoriesSection.innerHTML = '';
+    const query = searchQuery ? searchQuery.toLowerCase() : '';
     categoriesData.forEach(cat => {
+      // Filter items by search query
+      const itemsToShow = !query
+        ? cat.items
+        : cat.items.filter(item => item.name.toLowerCase().includes(query));
+      if (!itemsToShow || itemsToShow.length === 0) return;
       const catDiv = document.createElement('div');
       catDiv.className = 'category';
       catDiv.id = `category-${cat.id}`;
       catDiv.innerHTML = `<h2 class="category-title">${cat.name}</h2>`;
       const grid = document.createElement('div');
       grid.className = 'product-grid';
-      cat.items.forEach(item => {
+      itemsToShow.forEach(item => {
         const card = document.createElement('div');
         card.className = 'product-card';
         card.innerHTML = `
           <img src="${item.image}" alt="${item.name}">
           <div class="product-name">${item.name}</div>
-          <div class="product-price">$${item.price}</div>
+          <div class="product-price">KWD ${item.price}</div>
           <button class="btn add-cart" data-cat="${cat.id}" data-id="${item.id}">Add to Cart</button>
         `;
         grid.appendChild(card);
@@ -264,9 +280,9 @@
       itemDiv.innerHTML = `
         <div class="cart-item-details">
           <strong>${item.name}</strong>
-          <span>Price: $${item.price}</span>
+          <span>Price: KWD ${item.price}</span>
           <span>Quantity: ${ci.quantity}</span>
-          <span>Subtotal: $${itemTotal.toFixed(2)}</span>
+          <span>Subtotal: KWD ${itemTotal.toFixed(2)}</span>
         </div>
         <div class="cart-item-actions">
           <button class="btn btn-sm" data-action="decrease" data-cat="${ci.categoryId}" data-id="${ci.itemId}">-</button>
@@ -280,8 +296,13 @@
     container.appendChild(itemsList);
     const totalDiv = document.createElement('div');
     totalDiv.className = 'cart-total';
-    totalDiv.textContent = `Total: $${total.toFixed(2)}`;
+    totalDiv.textContent = `Total: KWD ${total.toFixed(2)}`;
     container.appendChild(totalDiv);
+    // Payment method note
+    const paymentDiv = document.createElement('div');
+    paymentDiv.className = 'payment-method';
+    paymentDiv.textContent = 'Payment Method: Cash on Delivery';
+    container.appendChild(paymentDiv);
     const checkoutBtn = document.createElement('button');
     checkoutBtn.className = 'btn';
     checkoutBtn.textContent = 'Checkout';
@@ -378,18 +399,32 @@
       return;
     }
     container.innerHTML = '';
+    // Display user information at top
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'user-info';
+    infoDiv.style.marginBottom = '24px';
+    infoDiv.innerHTML = `
+      <h3>Your Information</h3>
+      <p><strong>Name:</strong> ${user.fullName || user.username}</p>
+      <p><strong>Email:</strong> ${user.email}</p>
+      <p><strong>Phone:</strong> ${user.phone || '-'}</p>
+      <p><strong>Address:</strong> ${user.address || '-'}</p>
+      <p><strong>Payment Method:</strong> Cash on Delivery</p>
+    `;
+    container.appendChild(infoDiv);
+    // Display order history
     user.history.slice().reverse().forEach(order => {
       const orderDiv = document.createElement('div');
       orderDiv.className = 'order';
       orderDiv.innerHTML = `<div class="order-title">Order #${order.id} – ${order.date}</div>`;
       order.items.forEach(it => {
         const itemRow = document.createElement('div');
-        itemRow.innerHTML = `${it.quantity} x ${it.name} – $${(it.quantity * parseFloat(it.price)).toFixed(2)}`;
+        itemRow.innerHTML = `${it.quantity} x ${it.name} – KWD ${(it.quantity * parseFloat(it.price)).toFixed(2)}`;
         orderDiv.appendChild(itemRow);
       });
       const totalRow = document.createElement('div');
       totalRow.style.marginTop = '8px';
-      totalRow.innerHTML = `<strong>Total: $${order.total}</strong>`;
+      totalRow.innerHTML = `<strong>Total: KWD ${order.total}</strong>`;
       orderDiv.appendChild(totalRow);
       container.appendChild(orderDiv);
     });
@@ -403,18 +438,33 @@
     if (!form) return;
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      // Capture all registration fields including full name, phone and address
+      const fullName = form.fullname ? form.fullname.value.trim() : '';
       const username = form.username.value.trim();
       const email = form.email.value.trim();
+      const phone = form.phone ? form.phone.value.trim() : '';
+      const address = form.address ? form.address.value.trim() : '';
       const password = form.password.value;
-      if (!username || !email || !password) {
+      // Ensure all fields are provided
+      if (!fullName || !username || !email || !phone || !address || !password) {
         alert('Please fill out all fields');
         return;
       }
+      // Check if username already exists
       if (getUserByUsername(username)) {
         alert('Username already exists');
         return;
       }
-      const user = { username, email, password, history: [] };
+      // Create user object with extended information
+      const user = {
+        username,
+        fullName,
+        email,
+        phone,
+        address,
+        password,
+        history: []
+      };
       saveUser(user);
       setLoggedInUser(username);
       alert('Registration successful!');
@@ -586,7 +636,7 @@
           itemDiv.style.borderTop = '1px dashed #444';
           itemDiv.style.padding = '8px 0';
           itemDiv.innerHTML = `
-            <div><strong>${item.name}</strong> – $${item.price}</div>
+            <div><strong>${item.name}</strong> – KWD ${item.price}</div>
             <div>Description: ${item.description}</div>
             <div>Image URL: <a href="${item.image}" target="_blank">${item.image}</a></div>
             <button class="btn" data-action="edit-item" data-cat="${cat.id}" data-id="${item.id}">Edit</button>
@@ -752,6 +802,17 @@
       handleRegister();
     } else if (path.endsWith('admin.html')) {
       renderAdminPage();
+    }
+    // Attach search listener on any page that has the search input
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        searchQuery = searchInput.value.trim();
+        // Re-render categories if the section exists
+        if (document.getElementById('categories')) {
+          renderCategories();
+        }
+      });
     }
   }
 
