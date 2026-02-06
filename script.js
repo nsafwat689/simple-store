@@ -279,9 +279,14 @@
     const cart = getCart();
     let count = 0;
     let total = 0;
-    cart.forEach(item => {
-      count += item.quantity;
-      total += item.price * item.quantity;
+    cart.forEach(ci => {
+      count += ci.quantity;
+      // Resolve price from categories data
+      const category = categoriesData.find(c => c.id === ci.categoryId);
+      if (!category) return;
+      const item = category.items.find(it => it.id === ci.itemId);
+      if (!item) return;
+      total += ci.quantity * parseFloat(item.price);
     });
     summaryEl.textContent = `${count} item(s) - KWD ${total.toFixed(2)}`;
   }
@@ -474,62 +479,105 @@
     const container = document.querySelector('.cart-container');
     if (!container) return;
     const cart = getCart();
+    container.innerHTML = '';
+    // Heading
+    const heading = document.createElement('h2');
+    heading.textContent = 'Shopping Cart';
+    container.appendChild(heading);
+    // If empty cart
     if (cart.length === 0) {
-      container.innerHTML = '<p>Your cart is empty.</p>';
+      const emptyMsg = document.createElement('p');
+      emptyMsg.textContent = 'Your cart is empty.';
+      container.appendChild(emptyMsg);
       return;
     }
-    let total = 0;
-    const itemsList = document.createElement('div');
+    // Create table
+    const table = document.createElement('table');
+    table.className = 'cart-table';
+    table.innerHTML = `<thead><tr><th>Image</th><th>Product Name</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr></thead><tbody></tbody>`;
+    const tbody = table.querySelector('tbody');
+    let subTotal = 0;
     cart.forEach(ci => {
       const category = categoriesData.find(c => c.id === ci.categoryId);
+      if (!category) return;
       const item = category.items.find(it => it.id === ci.itemId);
+      if (!item) return;
       const itemTotal = ci.quantity * parseFloat(item.price);
-      total += itemTotal;
-      const itemDiv = document.createElement('div');
-      itemDiv.className = 'cart-item';
-      itemDiv.innerHTML = `
-        <div class="cart-item-details">
-          <strong>${item.name}</strong>
-          <span>Price: KWD ${item.price}</span>
-          <span>Quantity: ${ci.quantity}</span>
-          <span>Subtotal: KWD ${itemTotal.toFixed(2)}</span>
-        </div>
-        <div class="cart-item-actions">
-          <button class="btn btn-sm" data-action="decrease" data-cat="${ci.categoryId}" data-id="${ci.itemId}">-</button>
-          <button class="btn btn-sm" data-action="increase" data-cat="${ci.categoryId}" data-id="${ci.itemId}">+</button>
-          <button class="btn btn-sm" data-action="remove" data-cat="${ci.categoryId}" data-id="${ci.itemId}">Remove</button>
-        </div>
+      subTotal += itemTotal;
+      const tr = document.createElement('tr');
+      // Image cell
+      const imgTd = document.createElement('td');
+      imgTd.innerHTML = `<img src="${item.image}" alt="${item.name}">`;
+      tr.appendChild(imgTd);
+      // Name cell
+      const nameTd = document.createElement('td');
+      nameTd.innerHTML = `<strong>${item.name}</strong><br><small>Category: ${category.name}</small>`;
+      tr.appendChild(nameTd);
+      // Quantity cell
+      const qtyTd = document.createElement('td');
+      const qtyGroup = document.createElement('div');
+      qtyGroup.className = 'qty-group';
+      qtyGroup.innerHTML = `
+        <button class="qty-btn" data-action="decrease" data-cat="${ci.categoryId}" data-id="${ci.itemId}">-</button>
+        <span>${ci.quantity}</span>
+        <button class="qty-btn" data-action="increase" data-cat="${ci.categoryId}" data-id="${ci.itemId}">+</button>
+        <button class="remove-btn" data-action="remove" data-cat="${ci.categoryId}" data-id="${ci.itemId}">Remove</button>
       `;
-      itemsList.appendChild(itemDiv);
+      qtyTd.appendChild(qtyGroup);
+      tr.appendChild(qtyTd);
+      // Unit price cell
+      const priceTd = document.createElement('td');
+      priceTd.textContent = `KD ${parseFloat(item.price).toFixed(2)}`;
+      tr.appendChild(priceTd);
+      // Total cell
+      const totalTd = document.createElement('td');
+      totalTd.textContent = `KD ${itemTotal.toFixed(2)}`;
+      tr.appendChild(totalTd);
+      tbody.appendChild(tr);
     });
-    container.innerHTML = '';
-    container.appendChild(itemsList);
-    const totalDiv = document.createElement('div');
-    totalDiv.className = 'cart-total';
-    totalDiv.textContent = `Total: KWD ${total.toFixed(2)}`;
-    container.appendChild(totalDiv);
-    // Payment method note
-    const paymentDiv = document.createElement('div');
-    paymentDiv.className = 'payment-method';
-    paymentDiv.textContent = 'Payment Method: Cash on Delivery';
-    container.appendChild(paymentDiv);
+    container.appendChild(table);
+    // Actions (continue shopping and checkout)
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'cart-actions';
+    const continueLink = document.createElement('a');
+    continueLink.href = 'index.html';
+    continueLink.className = 'continue-btn';
+    continueLink.textContent = 'Continue Shopping';
     const checkoutBtn = document.createElement('button');
-    checkoutBtn.className = 'btn';
+    checkoutBtn.className = 'checkout-btn';
     checkoutBtn.textContent = 'Checkout';
     checkoutBtn.addEventListener('click', () => checkout());
-    container.appendChild(checkoutBtn);
-    // Attach handlers for quantity and removal
-    container.addEventListener('click', function (e) {
+    actionsDiv.appendChild(continueLink);
+    actionsDiv.appendChild(checkoutBtn);
+    container.appendChild(actionsDiv);
+    // Totals summary
+    const totalsDiv = document.createElement('div');
+    totalsDiv.className = 'cart-totals';
+    const totalsTable = document.createElement('table');
+    totalsTable.innerHTML = `
+      <tr><td>Sub-Total:</td><td>KD ${subTotal.toFixed(2)}</td></tr>
+      <tr><td><strong>Total:</strong></td><td><strong>KD ${subTotal.toFixed(2)}</strong></td></tr>
+    `;
+    totalsDiv.appendChild(totalsTable);
+    container.appendChild(totalsDiv);
+    // Payment method note (below totals)
+    const paymentDiv = document.createElement('div');
+    paymentDiv.className = 'payment-method';
+    paymentDiv.style.marginTop = '12px';
+    paymentDiv.textContent = 'Payment Method: Cash on Delivery';
+    container.appendChild(paymentDiv);
+    // Attach click handlers for qty and removal. Assign to onclick so previous handler is replaced
+    container.onclick = function (e) {
       const btn = e.target.closest('button');
       if (!btn || !btn.dataset.action) return;
       const action = btn.dataset.action;
       const categoryId = parseInt(btn.dataset.cat);
       const itemId = parseInt(btn.dataset.id);
       updateCartItem(action, categoryId, itemId);
-      // Re-render cart page and nav after update
+      // Rerender and update nav
       renderCartPage();
       renderAuthLinks();
-    });
+    };
   }
 
   /**
@@ -646,22 +694,33 @@
    * selected category with quantity selectors and add-to-cart buttons.
    */
   function renderCategoryPage() {
-    const container = document.getElementById('category-items');
-    if (!container) return;
+    const itemsContainer = document.getElementById('category-items');
+    if (!itemsContainer) return;
+    const sidebar = document.getElementById('category-sidebar');
     const params = new URLSearchParams(window.location.search);
     const catParam = params.get('cat');
     const catId = catParam ? parseInt(catParam) : NaN;
     const category = categoriesData.find(c => c.id === catId);
+    // Populate sidebar with all categories
+    if (sidebar) {
+      let html = '<h3>Categories</h3><ul>';
+      categoriesData.forEach(cat => {
+        const active = cat.id === catId ? 'active' : '';
+        html += `<li><a href="category.html?cat=${cat.id}" class="${active}">${cat.name}</a></li>`;
+      });
+      html += '</ul>';
+      sidebar.innerHTML = html;
+    }
     if (!category) {
-      container.innerHTML = '<p>Category not found.</p>';
+      itemsContainer.innerHTML = '<p>Category not found.</p>';
       return;
     }
-    container.innerHTML = '';
+    itemsContainer.innerHTML = '';
     // Category title
     const title = document.createElement('h2');
     title.textContent = category.name;
-    container.appendChild(title);
-    // Items list
+    itemsContainer.appendChild(title);
+    // Items list grid
     const list = document.createElement('div');
     list.className = 'category-item-grid';
     category.items.forEach(item => {
@@ -682,9 +741,9 @@
       `;
       list.appendChild(card);
     });
-    container.appendChild(list);
+    itemsContainer.appendChild(list);
     // Attach event listener for adding to cart
-    container.addEventListener('click', function (e) {
+    itemsContainer.addEventListener('click', function (e) {
       const btn = e.target.closest('button.add-to-cart');
       if (!btn || !btn.dataset.cat) return;
       const catId2 = parseInt(btn.dataset.cat);
