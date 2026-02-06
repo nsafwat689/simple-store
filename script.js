@@ -932,6 +932,10 @@
     header.appendChild(ordersLink);
     header.appendChild(logoutBtn);
     container.appendChild(header);
+    // Create a menu grid for admin actions. Icons will be added after sections are created.
+    const menuGrid = document.createElement('div');
+    menuGrid.className = 'admin-menu-grid';
+    container.appendChild(menuGrid);
     // Password change section
     const pwdSection = document.createElement('div');
     pwdSection.className = 'admin-section';
@@ -1285,9 +1289,71 @@
       });
     }
 
-    // After management sections, render banner and user management
-    renderBannerAdmin(container);
-    renderUserManagement(container);
+    // After management sections, render banner and user management and capture the sections
+    const bannerSection = renderBannerAdmin(container);
+    const usersSection = renderUserManagement(container);
+    // Assign unique IDs to each admin section for easy toggling
+    pwdSection.id = 'section-password';
+    catSection.id = 'section-categories';
+    itemSection.id = 'section-items';
+    bannerSection.id = 'section-banners';
+    usersSection.id = 'section-users';
+    // Hide all admin sections initially
+    [pwdSection, catSection, itemSection, bannerSection, usersSection].forEach(sec => {
+      sec.style.display = 'none';
+    });
+    // Helper function to toggle sections. For user management, optionally show list or add form.
+    function showSection(target) {
+      // Hide all top-level sections
+      [pwdSection, catSection, itemSection, bannerSection, usersSection].forEach(sec => {
+        sec.style.display = 'none';
+      });
+      if (target === 'password') {
+        pwdSection.style.display = 'block';
+      } else if (target === 'categories') {
+        catSection.style.display = 'block';
+      } else if (target === 'items') {
+        itemSection.style.display = 'block';
+      } else if (target === 'banners') {
+        bannerSection.style.display = 'block';
+      } else if (target === 'users-list' || target === 'users-add') {
+        usersSection.style.display = 'block';
+        const listEl = usersSection.querySelector('#user-list');
+        const addForm = usersSection.querySelector('#add-user-form');
+        const addHeader = usersSection.querySelector('h4');
+        // Some elements may not exist if structure changes; check before using
+        if (target === 'users-list') {
+          if (listEl) listEl.style.display = 'block';
+          if (addForm) addForm.style.display = 'none';
+          if (addHeader) addHeader.style.display = 'none';
+        } else {
+          if (listEl) listEl.style.display = 'none';
+          if (addForm) addForm.style.display = 'block';
+          if (addHeader) addHeader.style.display = 'block';
+        }
+      }
+    }
+    // Utility to create a menu item with icon and label
+    function createMenuItem(icon, label, target) {
+      const item = document.createElement('div');
+      item.className = 'admin-menu-item';
+      item.innerHTML = `<span class="menu-icon">${icon}</span><span class="menu-label">${label}</span>`;
+      item.dataset.target = target;
+      item.addEventListener('click', function () {
+        // Remove active class from all icons
+        menuGrid.querySelectorAll('.admin-menu-item').forEach(mi => mi.classList.remove('active'));
+        item.classList.add('active');
+        showSection(target);
+      });
+      menuGrid.appendChild(item);
+    }
+    // Create menu icons for each admin function
+    createMenuItem('🔒', 'Password', 'password');
+    createMenuItem('📂', 'Categories', 'categories');
+    createMenuItem('📦', 'Items', 'items');
+    createMenuItem('🖼️', 'Banners', 'banners');
+    createMenuItem('👥', 'Users', 'users-list');
+    createMenuItem('➕', 'Add User', 'users-add');
   }
 
   /**
@@ -1392,6 +1458,8 @@
         refreshBannerList();
       }
     });
+    // Return the section element so the caller can reference it
+    return section;
   }
 
   /**
@@ -1516,6 +1584,8 @@
         refreshUserList();
       }
     });
+    // Return the user management section so the caller can hide/show it
+    return section;
   }
 
   /**
