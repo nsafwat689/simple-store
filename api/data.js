@@ -1,5 +1,5 @@
 // API endpoint for managing data (users, products, orders)
-import { kv } from '@vercel/kv';
+import { put, head, list } from '@vercel/blob';
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -11,19 +11,41 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { type, action } = req.query;
+  const { type } = req.query;
+  const blobName = `data/${type}.json`;
 
   try {
     if (req.method === 'GET') {
-      // Get data
-      const data = await kv.get(`store:${type}`) || [];
-      return res.status(200).json(data);
+      // Get data from blob
+      try {
+        const { blobs } = await list({
+          prefix: blobName,
+          limit: 1,
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+        
+        if (blobs.length > 0) {
+          const response = await fetch(blobs[0].url);
+          const data = await response.json();
+          return res.status(200).json(data);
+        }
+        return res.status(200).json([]);
+      } catch (error) {
+        return res.status(200).json([]);
+      }
     }
 
     if (req.method === 'POST') {
       // Set/Update data
       const newData = req.body;
-      await kv.set(`store:${type}`, newData);
+      const jsonString = JSON.stringify(newData);
+      
+      await put(blobName, jsonString, {
+        access: 'public',
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+        contentType: 'application/json',
+      });
+      
       return res.status(200).json({ success: true });
     }
 
