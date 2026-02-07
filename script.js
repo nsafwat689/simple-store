@@ -1961,10 +1961,20 @@
    * display the admin login form. Orders are stored in localStorage
    * and updated using the getOrders/saveOrders helpers.
    */
+  /**
+   * Render the orders management page. This page allows the admin
+   * (or authorised staff) to view all orders grouped by status and
+   * update each order's status. If the admin is not logged in,
+   * display the admin login form. Orders are fetched from the
+   * backend API (`/api/orders`) rather than from localStorage so that
+   * they persist across browsers and devices. When the admin updates
+   * an order status it calls the API to persist the change and then
+   * re-renders the order tables.
+   */
   function renderOrdersPage() {
     const container = document.querySelector('.orders-container');
     if (!container) return;
-    // Ensure admin account exists
+    // Ensure admin account exists (local admin credentials)
     if (!getAdmin()) {
       saveAdmin({ username: 'admin', password: 'admin123' });
     }
@@ -2030,10 +2040,10 @@
     header.appendChild(title);
     header.appendChild(logoutBtn);
     container.appendChild(header);
-    // Fetch orders
-    let orders = getOrders();
     // Group orders by status
     const statuses = ['pending', 'shipped', 'cancelled'];
+    // Fetch orders from backend for each status
+    const sectionElements = {};
     statuses.forEach(status => {
       const section = document.createElement('div');
       section.className = 'admin-section';
@@ -2056,65 +2066,114 @@
         </thead>
         <tbody></tbody>
       `;
-      const tbody = table.querySelector('tbody');
-      orders
-        .filter(o => o.status === status)
-        .forEach(o => {
-          const tr = document.createElement('tr');
-          // ID
-          const tdId = document.createElement('td');
-          tdId.textContent = o.id;
-          tr.appendChild(tdId);
-          // Date
-          const tdDate = document.createElement('td');
-          tdDate.textContent = o.date;
-          tr.appendChild(tdDate);
-          // User
-          const tdUser = document.createElement('td');
-          tdUser.textContent = o.user;
-          tr.appendChild(tdUser);
-          // Items summary
-          const tdItems = document.createElement('td');
-          const summary = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
-          tdItems.textContent = summary;
-          tr.appendChild(tdItems);
-          // Total
-          const tdTotal = document.createElement('td');
-          tdTotal.textContent = `KD ${parseFloat(o.total).toFixed(2)}`;
-          tr.appendChild(tdTotal);
-          // Status select
-          const tdStatus = document.createElement('td');
-          const select = document.createElement('select');
-          select.className = 'status-select';
-          select.dataset.id = o.id;
-          ['pending','shipped','cancelled'].forEach(optVal => {
-            const opt = document.createElement('option');
-            opt.value = optVal;
-            opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
-            if (optVal === o.status) opt.selected = true;
-            select.appendChild(opt);
-          });
-          tdStatus.appendChild(select);
-          tr.appendChild(tdStatus);
-          tbody.appendChild(tr);
-        });
       section.appendChild(table);
       container.appendChild(section);
+      sectionElements[status] = { section, table };
     });
+    // Helper to render a set of orders into a table body
+    function populateTable(status, orders) {
+      const { table } = sectionElements[status];
+      const tbody = table.querySelector('tbody');
+      tbody.innerHTML = '';
+      orders.forEach(o => {
+        const tr = document.createElement('tr');
+        // ID
+        const tdId = document.createElement('td');
+        tdId.textContent = o.id;
+        tr.appendChild(tdId);
+        // Date
+        const tdDate = document.createElement('td');
+        const dateVal = o.created_at ? new Date(o.created_at).toLocaleString() : o.date;
+        tdDate.textContent = dateVal;
+        tr.appendChild(tdDate);
+        // User (show name or username)
+        const tdUser = document.createElement('td');
+        tdUser.textContent = o.user_name || o.user || '';
+        tr.appendChild(tdUser);
+        // Items summary (parse JSON if needed)
+        const tdItems = document.createElement('td');
+        let items = o.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch {
+            items = [];
+          }
+        }
+        const summary = Array.isArray(items)
+          ? items.map(it => `${it.quantity} x ${it.name}`).join(', ')
+          : '';
+        tdItems.textContent = summary;
+        tr.appendChild(tdItems);
+        // Total
+        const tdTotal = document.createElement('td');
+        const totalVal = o.total || o.total_amount;
+        tdTotal.textContent = `KD ${parseFloat(totalVal).toFixed(2)}`;
+        tr.appendChild(tdTotal);
+        // Status select
+        const tdStatus = document.createElement('td');
+        const select = document.createElement('select');
+        select.className = 'status-select';
+        select.dataset.id = o.id;
+        ['pending', 'shipped', 'cancelled'].forEach(optVal => {
+          const opt = document.createElement('option');
+          opt.value = optVal;
+          opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
+          if (optVal === o.status) opt.selected = true;
+          select.appendChild(opt);
+        });
+        tdStatus.appendChild(select);
+        tr.appendChild(tdStatus);
+        tbody.appendChild(tr);
+      });
+    }
+    // Function to refresh all sections by fetching orders
+    function refreshOrders() {
+      statuses.forEach(status => {
+        fetchOrdersAPI({ status })
+          .then(orders => {
+            populateTable(status, orders);
+          })
+          .catch(err => {
+            console.error('Error fetching orders', err);
+            // On error, fallback to localStorage orders for this status
+            const allOrders = getOrders();
+            const filtered = allOrders.filter(o => o.status === status);
+            populateTable(status, filtered);
+          });
+      });
+    }
+    // Initial load
+    refreshOrders();
     // Listen for status change events
     container.addEventListener('change', function (e) {
       const select = e.target.closest('select.status-select');
       if (!select) return;
       const id = parseInt(select.dataset.id);
       const newStatus = select.value;
-      orders = getOrders();
-      const idx = orders.findIndex(o => o.id === id);
-      if (idx !== -1) {
-        orders[idx].status = newStatus;
-        saveOrders(orders);
-        // Re-render to reflect changes
-        renderOrdersManagement(container);
-      }
+      // Update via API
+      updateOrderStatusAPI(id, newStatus)
+        .then(() => {
+          refreshOrders();
+          // Also update local user histories to reflect status change
+          const users = getUsers();
+          users.forEach(u => {
+            if (u.history) {
+              u.history.forEach(o => {
+                if (o.id === id) {
+                  o.status = newStatus;
+                }
+              });
+            }
+          });
+          saveUsers(users);
+        })
+        .catch(err => {
+          console.error('Error updating order status', err);
+          // On error, revert selection and show alert
+          alert('Failed to update order status. Please try again later.');
+          refreshOrders();
+        });
     });
   }
 
