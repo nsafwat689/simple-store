@@ -10,6 +10,51 @@
 
 // Immediately invoked function expression to avoid polluting global scope
 (function () {
+
+    // ==============================================
+  // API Helper Functions for Persistent Storage
+  // ==============================================
+  
+  const API_BASE = window.location.origin;
+  
+  async function apiGet(type) {
+    try {
+      const response = await fetch(`${API_BASE}/api/data?type=${type}`);
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error('API GET Error:', error);
+      return [];
+    }
+  }
+  
+  async function apiSet(type, data) {
+    try {
+      await fetch(`${API_BASE}/api/data?type=${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    } catch (error) {
+      console.error('API SET Error:', error);
+    }
+  }
+  
+  async function uploadImage(imageData, filename) {
+    try {
+      const response = await fetch(`${API_BASE}/api/upload-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData, filename })
+      });
+      const result = await response.json();
+      return result.url;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      return imageData; // fallback to base64
+    }
+  }
+
   /**
    * Default advertisements to display on the home page. These can be
    * updated later by editing this array or via the admin panel once
