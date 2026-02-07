@@ -675,6 +675,225 @@
       container.innerHTML = '<p>Please log in to see your order history.</p>';
       return;
     }
+
+  /**
+   * Render the billing section in the admin dashboard. This section allows
+   * admins to filter orders by various criteria (status, amount, item count,
+   * item name, username and date range) and export the filtered results to
+   * a CSV file for billing analysis. The billing data is derived from the
+   * global orders list stored in localStorage.
+   * @param {HTMLElement} section The container into which the billing UI will be rendered.
+   */
+  function renderBillingSection(section) {
+    if (!section) return;
+    // Clear previous content
+    section.innerHTML = '';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Billing';
+    section.appendChild(heading);
+    // Filters container
+    const filtersDiv = document.createElement('div');
+    filtersDiv.className = 'billing-filters';
+    filtersDiv.innerHTML = `
+      <label>Status
+        <select id="billing-status">
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="shipped">Shipped</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="returned">Returned</option>
+        </select>
+      </label>
+      <label>Min Amount (KWD)
+        <input type="number" id="billing-min-amount" min="0" step="0.01" placeholder="0.00">
+      </label>
+      <label>Max Amount (KWD)
+        <input type="number" id="billing-max-amount" min="0" step="0.01" placeholder="">
+      </label>
+      <label>Min Items Count
+        <input type="number" id="billing-min-count" min="0" step="1" placeholder="0">
+      </label>
+      <label>Max Items Count
+        <input type="number" id="billing-max-count" min="0" step="1" placeholder="">
+      </label>
+      <label>Item Name
+        <input type="text" id="billing-item-name" placeholder="e.g., Item 1">
+      </label>
+      <label>Username
+        <input type="text" id="billing-username" placeholder="e.g., johndoe">
+      </label>
+      <label>Start Date
+        <input type="date" id="billing-start-date">
+      </label>
+      <label>End Date
+        <input type="date" id="billing-end-date">
+      </label>
+    `;
+    section.appendChild(filtersDiv);
+    // Actions container
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'billing-actions';
+    const applyBtn = document.createElement('button');
+    applyBtn.textContent = 'Apply Filter';
+    applyBtn.className = 'checkout-btn';
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export CSV';
+    exportBtn.className = 'checkout-btn';
+    actionsDiv.appendChild(applyBtn);
+    actionsDiv.appendChild(exportBtn);
+    section.appendChild(actionsDiv);
+    // Results container
+    const resultsDiv = document.createElement('div');
+    resultsDiv.id = 'billing-results';
+    section.appendChild(resultsDiv);
+    // Variable to hold current filtered results
+    let currentFiltered = [];
+    // Helper to parse date string stored in orders
+    function parseOrderDate(dateStr) {
+      // Attempt to parse using Date constructor; fallback to new Date
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Render table with billing data
+    function renderBillingTable(list) {
+      resultsDiv.innerHTML = '';
+      if (!list || list.length === 0) {
+        resultsDiv.textContent = 'No orders found for the selected criteria.';
+        return;
+      }
+      const table = document.createElement('table');
+      table.className = 'orders-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>User</th>
+            <th>Status</th>
+            <th>Items</th>
+            <th>Total (KWD)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector('tbody');
+      list.forEach(o => {
+        const tr = document.createElement('tr');
+        const tdId = document.createElement('td');
+        tdId.textContent = o.id;
+        tr.appendChild(tdId);
+        const tdDate = document.createElement('td');
+        tdDate.textContent = o.date;
+        tr.appendChild(tdDate);
+        const tdUser = document.createElement('td');
+        tdUser.textContent = o.user;
+        tr.appendChild(tdUser);
+        const tdStatus = document.createElement('td');
+        tdStatus.textContent = o.status.charAt(0).toUpperCase() + o.status.slice(1);
+        tr.appendChild(tdStatus);
+        const tdItems = document.createElement('td');
+        tdItems.textContent = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
+        tr.appendChild(tdItems);
+        const tdTotal = document.createElement('td');
+        tdTotal.textContent = parseFloat(o.total).toFixed(2);
+        tr.appendChild(tdTotal);
+        tbody.appendChild(tr);
+      });
+      resultsDiv.appendChild(table);
+      // Compute total revenue
+      const totalRevenue = list.reduce((sum, o) => sum + parseFloat(o.total), 0);
+      const summary = document.createElement('div');
+      summary.style.marginTop = '8px';
+      summary.innerHTML = `<strong>Total Billing: KD ${totalRevenue.toFixed(2)}</strong>`;
+      resultsDiv.appendChild(summary);
+    }
+    // Filter orders based on input values
+    function applyFilters() {
+      const statusVal = document.getElementById('billing-status').value;
+      const minAmountVal = parseFloat(document.getElementById('billing-min-amount').value);
+      const maxAmountVal = parseFloat(document.getElementById('billing-max-amount').value);
+      const minCountVal = parseInt(document.getElementById('billing-min-count').value);
+      const maxCountVal = parseInt(document.getElementById('billing-max-count').value);
+      const itemNameVal = document.getElementById('billing-item-name').value.trim().toLowerCase();
+      const usernameVal = document.getElementById('billing-username').value.trim().toLowerCase();
+      const startDateVal = document.getElementById('billing-start-date').value;
+      const endDateVal = document.getElementById('billing-end-date').value;
+      const startDate = startDateVal ? new Date(startDateVal) : null;
+      const endDate = endDateVal ? new Date(endDateVal) : null;
+      let orders = getOrders();
+      // Apply status filter
+      if (statusVal !== 'all') {
+        orders = orders.filter(o => o.status === statusVal);
+      }
+      // Apply amount filter
+      orders = orders.filter(o => {
+        const tot = parseFloat(o.total);
+        if (!isNaN(minAmountVal) && tot < minAmountVal) return false;
+        if (!isNaN(maxAmountVal) && tot > maxAmountVal) return false;
+        return true;
+      });
+      // Apply items count filter
+      orders = orders.filter(o => {
+        const count = o.items.reduce((s, it) => s + it.quantity, 0);
+        if (!isNaN(minCountVal) && count < minCountVal) return false;
+        if (!isNaN(maxCountVal) && count > maxCountVal) return false;
+        return true;
+      });
+      // Apply item name filter
+      if (itemNameVal) {
+        orders = orders.filter(o => o.items.some(it => it.name.toLowerCase().includes(itemNameVal)));
+      }
+      // Apply username filter
+      if (usernameVal) {
+        orders = orders.filter(o => o.user.toLowerCase().includes(usernameVal));
+      }
+      // Apply date range filter
+      if (startDate || endDate) {
+        orders = orders.filter(o => {
+          const d = parseOrderDate(o.date);
+          if (!d) return false;
+          if (startDate && d < startDate) return false;
+          if (endDate) {
+            // Add one day to endDate to include orders on the end date
+            const end = new Date(endDate);
+            end.setDate(end.getDate() + 1);
+            if (d >= end) return false;
+          }
+          return true;
+        });
+      }
+      currentFiltered = orders;
+      renderBillingTable(currentFiltered);
+    }
+    // Export current filtered orders to CSV
+    function exportCSV() {
+      // Ensure there is data to export
+      if (!currentFiltered || currentFiltered.length === 0) {
+        alert('No billing data to export. Please apply filters to generate results.');
+        return;
+      }
+      const rows = [];
+      rows.push(['ID','Date','User','Status','Items','Total']);
+      currentFiltered.forEach(o => {
+        const itemsStr = o.items.map(it => `${it.quantity} x ${it.name}`).join('; ');
+        rows.push([o.id, o.date, o.user, o.status, itemsStr, o.total]);
+      });
+      const csvContent = rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'billing_data.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+    applyBtn.addEventListener('click', applyFilters);
+    exportBtn.addEventListener('click', exportCSV);
+    // Initial render
+    applyFilters();
+  }
     const user = getUserByUsername(username);
     if (!user || !user.history || user.history.length === 0) {
       container.innerHTML = '<p>No orders yet.</p>';
@@ -1322,6 +1541,20 @@
     cancelledOrdersSection.className = 'admin-section';
     cancelledOrdersSection.id = 'section-orders-cancelled';
     container.appendChild(cancelledOrdersSection);
+    // Create returned orders section
+    const returnedOrdersSection = document.createElement('div');
+    returnedOrdersSection.className = 'admin-section';
+    returnedOrdersSection.id = 'section-orders-returned';
+    container.appendChild(returnedOrdersSection);
+
+    // Create billing section
+    const billingSection = document.createElement('div');
+    billingSection.className = 'admin-section';
+    billingSection.id = 'section-billing';
+    container.appendChild(billingSection);
+
+    // Render the billing section UI
+    renderBillingSection(billingSection);
     // Helper to render a table of orders by status
     function renderOrdersByStatus(section, status) {
       const orders = getOrders();
@@ -1376,15 +1609,15 @@
           const select = document.createElement('select');
           select.className = 'status-select';
           select.dataset.id = o.id;
-          ['pending','shipped','cancelled'].forEach(optVal => {
+          ['pending','shipped','cancelled','returned'].forEach(optVal => {
             const opt = document.createElement('option');
             opt.value = optVal;
             opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
             if (optVal === o.status) opt.selected = true;
             select.appendChild(opt);
           });
-          // Disable status changes for cancelled orders so that once an order is cancelled it cannot be altered
-          if (o.status === 'cancelled') {
+          // Disable status changes for cancelled or returned orders so that once an order is final it cannot be altered
+          if (o.status === 'cancelled' || o.status === 'returned') {
             select.disabled = true;
           }
           tdStatus.appendChild(select);
@@ -1398,6 +1631,7 @@
       renderOrdersByStatus(pendingOrdersSection, 'pending');
       renderOrdersByStatus(shippedOrdersSection, 'shipped');
       renderOrdersByStatus(cancelledOrdersSection, 'cancelled');
+      renderOrdersByStatus(returnedOrdersSection, 'returned');
     }
     refreshOrdersSections();
     // Listen for localStorage changes from other tabs/windows. When orders are updated
@@ -1408,7 +1642,7 @@
       }
     });
     // Listen for status changes within orders sections
-    [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
+    [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection, returnedOrdersSection].forEach(sec => {
       sec.addEventListener('change', function (e) {
         const select = e.target.closest('select.status-select');
         if (!select) return;
@@ -1445,7 +1679,7 @@
     // Helper function to toggle sections. For user management, optionally show list or add form.
     function showSection(target) {
       // Hide all top-level sections
-      [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
+      [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection, returnedOrdersSection, billingSection].forEach(sec => {
         sec.style.display = 'none';
       });
       if (target === 'password') {
@@ -1477,6 +1711,10 @@
         shippedOrdersSection.style.display = 'block';
       } else if (target === 'orders-cancelled') {
         cancelledOrdersSection.style.display = 'block';
+      } else if (target === 'orders-returned') {
+        returnedOrdersSection.style.display = 'block';
+      } else if (target === 'billing') {
+        billingSection.style.display = 'block';
       }
     }
     // Utility to create a menu item with icon and label
@@ -1504,6 +1742,10 @@
     createMenuItem('⌛', 'Pending Orders', 'orders-pending');
     createMenuItem('✅', 'Shipped Orders', 'orders-shipped');
     createMenuItem('❌', 'Cancelled Orders', 'orders-cancelled');
+    // New menu item for returned orders
+    createMenuItem('🔁', 'Returned Orders', 'orders-returned');
+    // New menu item for billing section
+    createMenuItem('💼', 'Billing', 'billing');
   }
 
   /**
@@ -1871,7 +2113,7 @@
           const select = document.createElement('select');
           select.className = 'status-select';
           select.dataset.id = o.id;
-          ['pending','shipped','cancelled'].forEach(optVal => {
+          ['pending','shipped','cancelled','returned'].forEach(optVal => {
             const opt = document.createElement('option');
             opt.value = optVal;
             opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);

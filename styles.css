@@ -716,6 +716,35 @@ body.panel-open .main-content {
 .qty-btn:hover {
   background: var(--accent);
 }
+.billing-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.billing-filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+}
+.billing-actions {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.billing-actions button {
+  background: var(--primary);
+  color: var(--bg);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.billing-actions button:hover {
+  background: var(--accent);
+}
 .remove-btn {
   background: #e63946;
   color: #fff;
