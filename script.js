@@ -1541,20 +1541,6 @@
     cancelledOrdersSection.className = 'admin-section';
     cancelledOrdersSection.id = 'section-orders-cancelled';
     container.appendChild(cancelledOrdersSection);
-    // Create returned orders section
-    const returnedOrdersSection = document.createElement('div');
-    returnedOrdersSection.className = 'admin-section';
-    returnedOrdersSection.id = 'section-orders-returned';
-    container.appendChild(returnedOrdersSection);
-
-    // Create billing section
-    const billingSection = document.createElement('div');
-    billingSection.className = 'admin-section';
-    billingSection.id = 'section-billing';
-    container.appendChild(billingSection);
-
-    // Render the billing section UI
-    renderBillingSection(billingSection);
     // Helper to render a table of orders by status
     function renderOrdersByStatus(section, status) {
       const orders = getOrders();
@@ -1609,15 +1595,15 @@
           const select = document.createElement('select');
           select.className = 'status-select';
           select.dataset.id = o.id;
-          ['pending','shipped','cancelled','returned'].forEach(optVal => {
+          ['pending','shipped','cancelled'].forEach(optVal => {
             const opt = document.createElement('option');
             opt.value = optVal;
             opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
             if (optVal === o.status) opt.selected = true;
             select.appendChild(opt);
           });
-          // Disable status changes for cancelled or returned orders so that once an order is final it cannot be altered
-          if (o.status === 'cancelled' || o.status === 'returned') {
+          // Disable status changes for cancelled orders so that once an order is final it cannot be altered
+          if (o.status === 'cancelled') {
             select.disabled = true;
           }
           tdStatus.appendChild(select);
@@ -1631,7 +1617,6 @@
       renderOrdersByStatus(pendingOrdersSection, 'pending');
       renderOrdersByStatus(shippedOrdersSection, 'shipped');
       renderOrdersByStatus(cancelledOrdersSection, 'cancelled');
-      renderOrdersByStatus(returnedOrdersSection, 'returned');
     }
     refreshOrdersSections();
     // Listen for localStorage changes from other tabs/windows. When orders are updated
@@ -1642,7 +1627,7 @@
       }
     });
     // Listen for status changes within orders sections
-    [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection, returnedOrdersSection].forEach(sec => {
+    [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
       sec.addEventListener('change', function (e) {
         const select = e.target.closest('select.status-select');
         if (!select) return;
@@ -1679,7 +1664,7 @@
     // Helper function to toggle sections. For user management, optionally show list or add form.
     function showSection(target) {
       // Hide all top-level sections
-      [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection, returnedOrdersSection, billingSection].forEach(sec => {
+      [pwdSection, catSection, itemSection, bannerSection, usersSection, pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
         sec.style.display = 'none';
       });
       if (target === 'password') {
@@ -1711,10 +1696,6 @@
         shippedOrdersSection.style.display = 'block';
       } else if (target === 'orders-cancelled') {
         cancelledOrdersSection.style.display = 'block';
-      } else if (target === 'orders-returned') {
-        returnedOrdersSection.style.display = 'block';
-      } else if (target === 'billing') {
-        billingSection.style.display = 'block';
       }
     }
     // Utility to create a menu item with icon and label
@@ -1742,10 +1723,7 @@
     createMenuItem('⌛', 'Pending Orders', 'orders-pending');
     createMenuItem('✅', 'Shipped Orders', 'orders-shipped');
     createMenuItem('❌', 'Cancelled Orders', 'orders-cancelled');
-    // New menu item for returned orders
-    createMenuItem('🔁', 'Returned Orders', 'orders-returned');
-    // New menu item for billing section
-    createMenuItem('💼', 'Billing', 'billing');
+    // No returned or billing menu items in this version
   }
 
   /**
@@ -2113,7 +2091,7 @@
           const select = document.createElement('select');
           select.className = 'status-select';
           select.dataset.id = o.id;
-          ['pending','shipped','cancelled','returned'].forEach(optVal => {
+          ['pending','shipped','cancelled'].forEach(optVal => {
             const opt = document.createElement('option');
             opt.value = optVal;
             opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
