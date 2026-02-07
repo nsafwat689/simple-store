@@ -1,0 +1,9 @@
+{
+  "name": "simple-store",
+  "version": "1.0.0",
+  "description": "Lightweight e-commerce store",
+  "dependencies": {
+    "@vercel/blob": "^0.22.0",
+    "@vercel/kv": "^1.0.1"
+  }
+}
