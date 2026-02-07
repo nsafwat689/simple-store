@@ -10,51 +10,6 @@
 
 // Immediately invoked function expression to avoid polluting global scope
 (function () {
-
-    // ==============================================
-  // API Helper Functions for Persistent Storage
-  // ==============================================
-  
-  const API_BASE = window.location.origin;
-  
-  async function apiGet(type) {
-    try {
-      const response = await fetch(`${API_BASE}/api/data?type=${type}`);
-      if (!response.ok) return [];
-      return await response.json();
-    } catch (error) {
-      console.error('API GET Error:', error);
-      return [];
-    }
-  }
-  
-  async function apiSet(type, data) {
-    try {
-      await fetch(`${API_BASE}/api/data?type=${type}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-    } catch (error) {
-      console.error('API SET Error:', error);
-    }
-  }
-  
-  async function uploadImage(imageData, filename) {
-    try {
-      const response = await fetch(`${API_BASE}/api/upload-image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData, filename })
-      });
-      const result = await response.json();
-      return result.url;
-    } catch (error) {
-      console.error('Image upload error:', error);
-      return imageData; // fallback to base64
-    }
-  }
-
   /**
    * Default advertisements to display on the home page. These can be
    * updated later by editing this array or via the admin panel once
@@ -130,6 +85,112 @@
   }
   function saveOrders(orders) {
     localStorage.setItem('orders', JSON.stringify(orders));
+  }
+
+  /**
+   * API helpers
+   *
+   * The following functions communicate with the backend API routes
+   * deployed on Vercel (api/orders.js and api/images.js). These
+   * functions are used instead of localStorage for persisting orders
+   * and images when a backend is available. If an API call fails,
+   * callers should gracefully fallback or notify the user.
+   */
+
+  // Create a new order in the database. Accepts an object with
+  // `user`, `items` and `total` fields. Returns a promise that
+  // resolves to the created order ({ id, status }).
+  async function createOrderAPI(orderData) {
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+      if (!response.ok) {
+        throw new Error('Failed to create order');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  }
+
+  // Fetch orders from the server. Accepts an optional status and email
+  // filter. Returns a promise that resolves to an array of orders.
+  async function fetchOrdersAPI(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.email) params.append('email', filters.email);
+    try {
+      const response = await fetch('/api/orders?' + params.toString(), {
+        method: 'GET'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  }
+
+  // Update the status of an order by ID. Returns the updated order.
+  async function updateOrderStatusAPI(id, status) {
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update order status');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  }
+
+  // Upload an image to the server. Accepts a filename and base64 data
+  // (without the data URI prefix). Returns an object with the new
+  // image ID. If the upload fails, an error is thrown.
+  async function uploadImageAPI(filename, data) {
+    try {
+      const response = await fetch('/api/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, data })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  }
+
+  // Fetch image metadata and base64 data by ID. Returns an object
+  // containing filename and data. If the image cannot be found,
+  // throws an error.
+  async function fetchImageAPI(id) {
+    try {
+      const response = await fetch('/api/images?id=' + encodeURIComponent(id), {
+        method: 'GET'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch image');
+      }
+      return await response.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
   }
   function getUserByUsername(username) {
     return getUsers().find(u => u.username === username);
@@ -686,31 +747,71 @@
       };
     });
     const total = orderItems.reduce((sum, it) => sum + it.quantity * parseFloat(it.price), 0);
-    const order = {
-      id: Date.now(),
-      date: new Date().toLocaleString(),
-      user: username,
+    // Build order payload for API
+    const orderPayload = {
+      user: {
+        fullName: user.fullName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || ''
+      },
       items: orderItems,
       total: total.toFixed(2)
-      ,
-      status: 'pending'
     };
-    if (!user.history) {
-      user.history = [];
-    }
-    user.history.push(order);
-    saveUser(user);
-    // Persist order in global orders list
-    const allOrders = getOrders();
-    allOrders.push(order);
-    saveOrders(allOrders);
-    saveCart([]);
-    alert('Thank you for your purchase!');
-    window.location.href = 'history.html';
+    // Call the backend API to create the order
+    createOrderAPI(orderPayload)
+      .then(newOrder => {
+        // Assign the returned ID and status to the order
+        const order = {
+          id: newOrder.id,
+          date: new Date().toLocaleString(),
+          user: username,
+          items: orderItems,
+          total: total.toFixed(2),
+          status: newOrder.status
+        };
+        if (!user.history) {
+          user.history = [];
+        }
+        user.history.push(order);
+        saveUser(user);
+        // Clear cart
+        saveCart([]);
+        window.location.href = 'history.html';
+      })
+      .catch(err => {
+        // If the API fails, fall back to localStorage for orders
+        console.warn('Falling back to localStorage for order persistence');
+        const order = {
+          id: Date.now(),
+          date: new Date().toLocaleString(),
+          user: username,
+          items: orderItems,
+          total: total.toFixed(2),
+          status: 'pending'
+        };
+        if (!user.history) {
+          user.history = [];
+        }
+        user.history.push(order);
+        saveUser(user);
+        const allOrders = getOrders();
+        allOrders.push(order);
+        saveOrders(allOrders);
+        saveCart([]);
+        window.location.href = 'history.html';
+      });
   }
 
   /**
    * Render the order history page for logged in users.
+   */
+  /**
+   * Render the order history page for the logged in user. This function
+   * fetches orders from the backend API using the user's email. If the API
+   * is unavailable or returns no orders, it falls back to the local
+   * history stored on the user object. Each order shows its ID, date,
+   * item summary, total and current status.
    */
   function renderHistoryPage() {
     const container = document.querySelector('.history-container');
@@ -720,266 +821,99 @@
       container.innerHTML = '<p>Please log in to see your order history.</p>';
       return;
     }
-
-  /**
-   * Render the billing section in the admin dashboard. This section allows
-   * admins to filter orders by various criteria (status, amount, item count,
-   * item name, username and date range) and export the filtered results to
-   * a CSV file for billing analysis. The billing data is derived from the
-   * global orders list stored in localStorage.
-   * @param {HTMLElement} section The container into which the billing UI will be rendered.
-   */
-  function renderBillingSection(section) {
-    if (!section) return;
-    // Clear previous content
-    section.innerHTML = '';
-    const heading = document.createElement('h3');
-    heading.textContent = 'Billing';
-    section.appendChild(heading);
-    // Filters container
-    const filtersDiv = document.createElement('div');
-    filtersDiv.className = 'billing-filters';
-    filtersDiv.innerHTML = `
-      <label>Status
-        <select id="billing-status">
-          <option value="all">All</option>
-          <option value="pending">Pending</option>
-          <option value="shipped">Shipped</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="returned">Returned</option>
-        </select>
-      </label>
-      <label>Min Amount (KWD)
-        <input type="number" id="billing-min-amount" min="0" step="0.01" placeholder="0.00">
-      </label>
-      <label>Max Amount (KWD)
-        <input type="number" id="billing-max-amount" min="0" step="0.01" placeholder="">
-      </label>
-      <label>Min Items Count
-        <input type="number" id="billing-min-count" min="0" step="1" placeholder="0">
-      </label>
-      <label>Max Items Count
-        <input type="number" id="billing-max-count" min="0" step="1" placeholder="">
-      </label>
-      <label>Item Name
-        <input type="text" id="billing-item-name" placeholder="e.g., Item 1">
-      </label>
-      <label>Username
-        <input type="text" id="billing-username" placeholder="e.g., johndoe">
-      </label>
-      <label>Start Date
-        <input type="date" id="billing-start-date">
-      </label>
-      <label>End Date
-        <input type="date" id="billing-end-date">
-      </label>
-    `;
-    section.appendChild(filtersDiv);
-    // Actions container
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'billing-actions';
-    const applyBtn = document.createElement('button');
-    applyBtn.textContent = 'Apply Filter';
-    applyBtn.className = 'checkout-btn';
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export CSV';
-    exportBtn.className = 'checkout-btn';
-    actionsDiv.appendChild(applyBtn);
-    actionsDiv.appendChild(exportBtn);
-    section.appendChild(actionsDiv);
-    // Results container
-    const resultsDiv = document.createElement('div');
-    resultsDiv.id = 'billing-results';
-    section.appendChild(resultsDiv);
-    // Variable to hold current filtered results
-    let currentFiltered = [];
-    // Helper to parse date string stored in orders
-    function parseOrderDate(dateStr) {
-      // Attempt to parse using Date constructor; fallback to new Date
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? null : d;
-    }
-    // Render table with billing data
-    function renderBillingTable(list) {
-      resultsDiv.innerHTML = '';
-      if (!list || list.length === 0) {
-        resultsDiv.textContent = 'No orders found for the selected criteria.';
-        return;
-      }
-      const table = document.createElement('table');
-      table.className = 'orders-table';
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Date</th>
-            <th>User</th>
-            <th>Status</th>
-            <th>Items</th>
-            <th>Total (KWD)</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      `;
-      const tbody = table.querySelector('tbody');
-      list.forEach(o => {
-        const tr = document.createElement('tr');
-        const tdId = document.createElement('td');
-        tdId.textContent = o.id;
-        tr.appendChild(tdId);
-        const tdDate = document.createElement('td');
-        tdDate.textContent = o.date;
-        tr.appendChild(tdDate);
-        const tdUser = document.createElement('td');
-        tdUser.textContent = o.user;
-        tr.appendChild(tdUser);
-        const tdStatus = document.createElement('td');
-        tdStatus.textContent = o.status.charAt(0).toUpperCase() + o.status.slice(1);
-        tr.appendChild(tdStatus);
-        const tdItems = document.createElement('td');
-        tdItems.textContent = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
-        tr.appendChild(tdItems);
-        const tdTotal = document.createElement('td');
-        tdTotal.textContent = parseFloat(o.total).toFixed(2);
-        tr.appendChild(tdTotal);
-        tbody.appendChild(tr);
-      });
-      resultsDiv.appendChild(table);
-      // Compute total revenue
-      const totalRevenue = list.reduce((sum, o) => sum + parseFloat(o.total), 0);
-      const summary = document.createElement('div');
-      summary.style.marginTop = '8px';
-      summary.innerHTML = `<strong>Total Billing: KD ${totalRevenue.toFixed(2)}</strong>`;
-      resultsDiv.appendChild(summary);
-    }
-    // Filter orders based on input values
-    function applyFilters() {
-      const statusVal = document.getElementById('billing-status').value;
-      const minAmountVal = parseFloat(document.getElementById('billing-min-amount').value);
-      const maxAmountVal = parseFloat(document.getElementById('billing-max-amount').value);
-      const minCountVal = parseInt(document.getElementById('billing-min-count').value);
-      const maxCountVal = parseInt(document.getElementById('billing-max-count').value);
-      const itemNameVal = document.getElementById('billing-item-name').value.trim().toLowerCase();
-      const usernameVal = document.getElementById('billing-username').value.trim().toLowerCase();
-      const startDateVal = document.getElementById('billing-start-date').value;
-      const endDateVal = document.getElementById('billing-end-date').value;
-      const startDate = startDateVal ? new Date(startDateVal) : null;
-      const endDate = endDateVal ? new Date(endDateVal) : null;
-      let orders = getOrders();
-      // Apply status filter
-      if (statusVal !== 'all') {
-        orders = orders.filter(o => o.status === statusVal);
-      }
-      // Apply amount filter
-      orders = orders.filter(o => {
-        const tot = parseFloat(o.total);
-        if (!isNaN(minAmountVal) && tot < minAmountVal) return false;
-        if (!isNaN(maxAmountVal) && tot > maxAmountVal) return false;
-        return true;
-      });
-      // Apply items count filter
-      orders = orders.filter(o => {
-        const count = o.items.reduce((s, it) => s + it.quantity, 0);
-        if (!isNaN(minCountVal) && count < minCountVal) return false;
-        if (!isNaN(maxCountVal) && count > maxCountVal) return false;
-        return true;
-      });
-      // Apply item name filter
-      if (itemNameVal) {
-        orders = orders.filter(o => o.items.some(it => it.name.toLowerCase().includes(itemNameVal)));
-      }
-      // Apply username filter
-      if (usernameVal) {
-        orders = orders.filter(o => o.user.toLowerCase().includes(usernameVal));
-      }
-      // Apply date range filter
-      if (startDate || endDate) {
-        orders = orders.filter(o => {
-          const d = parseOrderDate(o.date);
-          if (!d) return false;
-          if (startDate && d < startDate) return false;
-          if (endDate) {
-            // Add one day to endDate to include orders on the end date
-            const end = new Date(endDate);
-            end.setDate(end.getDate() + 1);
-            if (d >= end) return false;
-          }
-          return true;
-        });
-      }
-      currentFiltered = orders;
-      renderBillingTable(currentFiltered);
-    }
-    // Export current filtered orders to CSV
-    function exportCSV() {
-      // Ensure there is data to export
-      if (!currentFiltered || currentFiltered.length === 0) {
-        alert('No billing data to export. Please apply filters to generate results.');
-        return;
-      }
-      const rows = [];
-      rows.push(['ID','Date','User','Status','Items','Total']);
-      currentFiltered.forEach(o => {
-        const itemsStr = o.items.map(it => `${it.quantity} x ${it.name}`).join('; ');
-        rows.push([o.id, o.date, o.user, o.status, itemsStr, o.total]);
-      });
-      const csvContent = rows.map(r => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', 'billing_data.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-    applyBtn.addEventListener('click', applyFilters);
-    exportBtn.addEventListener('click', exportCSV);
-    // Initial render
-    applyFilters();
-  }
     const user = getUserByUsername(username);
-    if (!user || !user.history || user.history.length === 0) {
-      container.innerHTML = '<p>No orders yet.</p>';
-      return;
-    }
+    // Clear existing content
     container.innerHTML = '';
-    // Display user information at top
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'user-info';
-    infoDiv.style.marginBottom = '24px';
-    infoDiv.innerHTML = `
-      <h3>Your Information</h3>
-      <p><strong>Name:</strong> ${user.fullName || user.username}</p>
-      <p><strong>Email:</strong> ${user.email}</p>
-      <p><strong>Phone:</strong> ${user.phone || '-'}</p>
-      <p><strong>Address:</strong> ${user.address || '-'}</p>
-      <p><strong>Payment Method:</strong> Cash on Delivery</p>
-    `;
-    container.appendChild(infoDiv);
-    // Display order history
-    user.history.slice().reverse().forEach(order => {
-      const orderDiv = document.createElement('div');
-      orderDiv.className = 'order';
-      orderDiv.innerHTML = `<div class="order-title">Order #${order.id} – ${order.date}</div>`;
-      order.items.forEach(it => {
-        const itemRow = document.createElement('div');
-        itemRow.innerHTML = `${it.quantity} x ${it.name} – KWD ${(it.quantity * parseFloat(it.price)).toFixed(2)}`;
-        orderDiv.appendChild(itemRow);
+    // Display header with user info
+    if (user) {
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'user-info';
+      infoDiv.style.marginBottom = '24px';
+      infoDiv.innerHTML = `
+        <h3>Your Information</h3>
+        <p><strong>Name:</strong> ${user.fullName || user.username}</p>
+        <p><strong>Email:</strong> ${user.email || '-'}</p>
+        <p><strong>Phone:</strong> ${user.phone || '-'}</p>
+        <p><strong>Address:</strong> ${user.address || '-'}</p>
+        <p><strong>Payment Method:</strong> Cash on Delivery</p>
+      `;
+      container.appendChild(infoDiv);
+    }
+    // Helper to render orders list
+    function renderOrdersList(orders) {
+      if (!orders || orders.length === 0) {
+        container.innerHTML += '<p>No orders yet.</p>';
+        return;
+      }
+      orders.forEach(order => {
+        const orderDiv = document.createElement('div');
+        orderDiv.className = 'order';
+        const dateText = order.created_at
+          ? new Date(order.created_at).toLocaleString()
+          : (order.date || '');
+        orderDiv.innerHTML = `<div class="order-title">Order #${order.id} – ${dateText}</div>`;
+        // Parse items if stored as JSON string
+        let items = order.items;
+        if (typeof items === 'string') {
+          try {
+            items = JSON.parse(items);
+          } catch {
+            items = [];
+          }
+        }
+        if (Array.isArray(items)) {
+          items.forEach(it => {
+            const itemRow = document.createElement('div');
+            const priceVal = parseFloat(it.price);
+            const itemTotal = it.quantity * (isNaN(priceVal) ? 0 : priceVal);
+            itemRow.textContent = `${it.quantity} x ${it.name} – KWD ${itemTotal.toFixed(2)}`;
+            orderDiv.appendChild(itemRow);
+          });
+        }
+        const totalRow = document.createElement('div');
+        totalRow.style.marginTop = '8px';
+        const totalVal = order.total || order.total_amount || 0;
+        totalRow.innerHTML = `<strong>Total: KWD ${parseFloat(totalVal).toFixed(2)}</strong>`;
+        orderDiv.appendChild(totalRow);
+        const statusRow = document.createElement('div');
+        statusRow.style.marginTop = '4px';
+        const statusText = order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown';
+        statusRow.innerHTML = `<strong>Status:</strong> ${statusText}`;
+        orderDiv.appendChild(statusRow);
+        container.appendChild(orderDiv);
       });
-      const totalRow = document.createElement('div');
-      totalRow.style.marginTop = '8px';
-      totalRow.innerHTML = `<strong>Total: KWD ${order.total}</strong>`;
-      orderDiv.appendChild(totalRow);
-      // Display order status so the customer knows the current state of their order
-      const statusRow = document.createElement('div');
-      statusRow.style.marginTop = '4px';
-      const statusLabel = order.status ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : 'Unknown';
-      statusRow.innerHTML = `<strong>Status:</strong> ${statusLabel}`;
-      orderDiv.appendChild(statusRow);
-      container.appendChild(orderDiv);
-    });
+    }
+    // If user has an email, fetch orders from the backend
+    const userEmail = user && user.email;
+    if (userEmail) {
+      fetchOrdersAPI({ email: userEmail })
+        .then(orders => {
+          // Render orders from API
+          if (orders && orders.length > 0) {
+            renderOrdersList(orders);
+          } else if (user && user.history && user.history.length > 0) {
+            // Fallback to local history if API returned nothing
+            renderOrdersList(user.history.slice().reverse());
+          } else {
+            container.innerHTML += '<p>No orders yet.</p>';
+          }
+        })
+        .catch(() => {
+          // On error, fallback to local history
+          if (user && user.history && user.history.length > 0) {
+            renderOrdersList(user.history.slice().reverse());
+          } else {
+            container.innerHTML += '<p>No orders yet.</p>';
+          }
+        });
+    } else {
+      // If no email, fallback to local history
+      if (user && user.history && user.history.length > 0) {
+        renderOrdersList(user.history.slice().reverse());
+      } else {
+        container.innerHTML += '<p>No orders yet.</p>';
+      }
+    }
   }
 
   /**
@@ -1588,74 +1522,94 @@
     container.appendChild(cancelledOrdersSection);
     // Helper to render a table of orders by status
     function renderOrdersByStatus(section, status) {
-      const orders = getOrders();
-      section.innerHTML = '';
-      const heading = document.createElement('h3');
-      // Capitalize status for heading
-      heading.textContent = `${status.charAt(0).toUpperCase() + status.slice(1)} Orders`;
-      section.appendChild(heading);
-      const table = document.createElement('table');
-      table.className = 'orders-table';
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Date</th>
-            <th>User</th>
-            <th>Items</th>
-            <th>Total</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      `;
-      const tbody = table.querySelector('tbody');
-      orders
-        .filter(o => o.status === status)
-        .forEach(o => {
-          const tr = document.createElement('tr');
-          // ID
-          const tdId = document.createElement('td');
-          tdId.textContent = o.id;
-          tr.appendChild(tdId);
-          // Date
-          const tdDate = document.createElement('td');
-          tdDate.textContent = o.date;
-          tr.appendChild(tdDate);
-          // User
-          const tdUser = document.createElement('td');
-          tdUser.textContent = o.user;
-          tr.appendChild(tdUser);
-          // Items summary
-          const tdItems = document.createElement('td');
-          const summary = o.items.map(it => `${it.quantity} x ${it.name}`).join(', ');
-          tdItems.textContent = summary;
-          tr.appendChild(tdItems);
-          // Total
-          const tdTotal = document.createElement('td');
-          tdTotal.textContent = `KD ${parseFloat(o.total).toFixed(2)}`;
-          tr.appendChild(tdTotal);
-          // Status select
-          const tdStatus = document.createElement('td');
-          const select = document.createElement('select');
-          select.className = 'status-select';
-          select.dataset.id = o.id;
-          ['pending','shipped','cancelled'].forEach(optVal => {
-            const opt = document.createElement('option');
-            opt.value = optVal;
-            opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
-            if (optVal === o.status) opt.selected = true;
-            select.appendChild(opt);
+      // Clear the section and set a loading indicator
+      section.innerHTML = '<p>Loading orders...</p>';
+      // Fetch orders from the backend for this status
+      fetchOrdersAPI({ status })
+        .then(orders => {
+          section.innerHTML = '';
+          const heading = document.createElement('h3');
+          // Capitalize status for heading
+          heading.textContent = `${status.charAt(0).toUpperCase() + status.slice(1)} Orders`;
+          section.appendChild(heading);
+          const table = document.createElement('table');
+          table.className = 'orders-table';
+          table.innerHTML = `
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>User</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          `;
+          const tbody = table.querySelector('tbody');
+          orders.forEach(o => {
+            const tr = document.createElement('tr');
+            // ID
+            const tdId = document.createElement('td');
+            tdId.textContent = o.id;
+            tr.appendChild(tdId);
+            // Date
+            const tdDate = document.createElement('td');
+            // Use created_at from DB if available, otherwise fallback to date field
+            const dateText = o.created_at ? new Date(o.created_at).toLocaleString() : (o.date || '');
+            tdDate.textContent = dateText;
+            tr.appendChild(tdDate);
+            // User (use email or user_name if available)
+            const tdUser = document.createElement('td');
+            tdUser.textContent = o.user_email || o.user || '';
+            tr.appendChild(tdUser);
+            // Items summary
+            const tdItems = document.createElement('td');
+            let orderItems = o.items;
+            // If items is stored as JSON string in DB, parse it
+            if (typeof orderItems === 'string') {
+              try {
+                orderItems = JSON.parse(orderItems);
+              } catch (e) {
+                orderItems = [];
+              }
+            }
+            const summary = Array.isArray(orderItems)
+              ? orderItems.map(it => `${it.quantity} x ${it.name}`).join(', ')
+              : '';
+            tdItems.textContent = summary;
+            tr.appendChild(tdItems);
+            // Total
+            const tdTotal = document.createElement('td');
+            const totalVal = o.total || (o.total_amount || 0);
+            tdTotal.textContent = `KD ${parseFloat(totalVal).toFixed(2)}`;
+            tr.appendChild(tdTotal);
+            // Status select
+            const tdStatus = document.createElement('td');
+            const select = document.createElement('select');
+            select.className = 'status-select';
+            select.dataset.id = o.id;
+            ['pending','shipped','cancelled'].forEach(optVal => {
+              const opt = document.createElement('option');
+              opt.value = optVal;
+              opt.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
+              if (optVal === o.status) opt.selected = true;
+              select.appendChild(opt);
+            });
+            // Disable status changes for cancelled orders so that once an order is final it cannot be altered
+            if (o.status === 'cancelled') {
+              select.disabled = true;
+            }
+            tdStatus.appendChild(select);
+            tr.appendChild(tdStatus);
+            tbody.appendChild(tr);
           });
-          // Disable status changes for cancelled orders so that once an order is final it cannot be altered
-          if (o.status === 'cancelled') {
-            select.disabled = true;
-          }
-          tdStatus.appendChild(select);
-          tr.appendChild(tdStatus);
-          tbody.appendChild(tr);
+          section.appendChild(table);
+        })
+        .catch(err => {
+          section.innerHTML = '<p>Error loading orders.</p>';
         });
-      section.appendChild(table);
     }
     // Render all orders sections initially
     function refreshOrdersSections() {
@@ -1666,40 +1620,37 @@
     refreshOrdersSections();
     // Listen for localStorage changes from other tabs/windows. When orders are updated
     // (e.g., a new order is placed), refresh the orders sections automatically
-    window.addEventListener('storage', function (e) {
-      if (e.key === 'orders') {
-        refreshOrdersSections();
-      }
-    });
-    // Listen for status changes within orders sections
+    // We no longer rely on localStorage for orders. When the status select
+    // changes, call the API to update the order and refresh the tables.
     [pendingOrdersSection, shippedOrdersSection, cancelledOrdersSection].forEach(sec => {
       sec.addEventListener('change', function (e) {
         const select = e.target.closest('select.status-select');
         if (!select) return;
         const id = parseInt(select.dataset.id);
         const newStatus = select.value;
-        const orders = getOrders();
-        const idx = orders.findIndex(o => o.id === id);
-        if (idx !== -1) {
-          orders[idx].status = newStatus;
-          saveOrders(orders);
-          // Also update the status in each user's order history so customers see the latest status
-          const users = getUsers();
-          let updated = false;
-          users.forEach(u => {
-            if (u.history && Array.isArray(u.history)) {
-              const hIdx = u.history.findIndex(ord => ord.id === id);
-              if (hIdx !== -1) {
-                u.history[hIdx].status = newStatus;
-                updated = true;
+        updateOrderStatusAPI(id, newStatus)
+          .then(() => {
+            // Also update the status in each user's order history so customers see the latest status
+            const users = getUsers();
+            let updated = false;
+            users.forEach(u => {
+              if (u.history && Array.isArray(u.history)) {
+                const hIdx = u.history.findIndex(ord => ord.id === id);
+                if (hIdx !== -1) {
+                  u.history[hIdx].status = newStatus;
+                  updated = true;
+                }
               }
+            });
+            if (updated) {
+              saveUsers(users);
             }
+            refreshOrdersSections();
+          })
+          .catch(err => {
+            console.error('Failed to update order via API', err);
+            refreshOrdersSections();
           });
-          if (updated) {
-            saveUsers(users);
-          }
-          refreshOrdersSections();
-        }
       });
     });
     // Hide all admin sections initially
